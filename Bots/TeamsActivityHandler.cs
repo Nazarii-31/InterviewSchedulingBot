@@ -14,12 +14,14 @@ namespace InterviewSchedulingBot.Bots
     {
         private readonly IGraphCalendarService _calendarService;
         private readonly IAuthenticationService _authService;
+        private readonly ISchedulingService _schedulingService;
         private readonly IConfiguration _configuration;
 
-        public InterviewBot(IGraphCalendarService calendarService, IAuthenticationService authService, IConfiguration configuration)
+        public InterviewBot(IGraphCalendarService calendarService, IAuthenticationService authService, ISchedulingService schedulingService, IConfiguration configuration)
         {
             _calendarService = calendarService;
             _authService = authService;
+            _schedulingService = schedulingService;
             _configuration = configuration;
         }
 
@@ -67,6 +69,10 @@ namespace InterviewSchedulingBot.Bots
             if (userMessage.ToLower().Contains("schedule") || userMessage.ToLower().Contains("interview"))
             {
                 await HandleScheduleRequestAsync(turnContext, cancellationToken);
+            }
+            else if (userMessage.ToLower().Contains("find") && userMessage.ToLower().Contains("slots"))
+            {
+                await HandleFindSlotsRequestAsync(turnContext, cancellationToken);
             }
             else if (userMessage.ToLower().Contains("help"))
             {
@@ -141,15 +147,118 @@ namespace InterviewSchedulingBot.Bots
             }
 
             var response = "Great! You're authenticated and ready to schedule interviews.\n\n" +
-                          "To schedule an interview, I'll need the following information:\n" +
-                          "- Interviewer email\n" +
-                          "- Candidate email\n" +
-                          "- Date and time\n" +
-                          "- Duration\n" +
-                          "- Interview title\n\n" +
-                          "Please provide these details and I'll help you create the calendar event.";
+                          "I can help you in two ways:\n" +
+                          "1. **Find available slots** - Type 'find slots' and I'll help you find common availability for multiple attendees\n" +
+                          "2. **Create interview directly** - Provide interview details and I'll create the calendar event\n\n" +
+                          "For finding slots, I'll need:\n" +
+                          "- Attendee email addresses\n" +
+                          "- Interview duration\n" +
+                          "- Date range to search\n\n" +
+                          "Type 'find slots' to start the scheduling assistant!";
 
             await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+        }
+
+        private async Task HandleFindSlotsRequestAsync(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+            var accessToken = await _authService.GetAccessTokenAsync(userId);
+
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                await HandleAuthenticationAsync(turnContext, cancellationToken);
+                return;
+            }
+
+            // For demo purposes, let's use some example values
+            // In a real implementation, you would collect this information through a conversation flow
+            var userMessage = turnContext.Activity.Text?.ToLower() ?? "";
+            
+            if (userMessage.Contains("example") || userMessage.Contains("demo"))
+            {
+                await HandleExampleSchedulingAsync(turnContext, cancellationToken);
+                return;
+            }
+
+            var response = "📅 **Interview Scheduling Assistant**\n\n" +
+                          "To find available time slots, please provide the following information:\n\n" +
+                          "**Format:** attendee1@company.com, attendee2@company.com | duration:60 | days:7\n\n" +
+                          "**Example:** \n" +
+                          "`john@company.com, jane@company.com | duration:90 | days:14`\n\n" +
+                          "Or type `example demo` to see a demonstration with mock data.\n\n" +
+                          "**Parameters:**\n" +
+                          "- **Attendees:** Comma-separated email addresses\n" +
+                          "- **Duration:** Meeting duration in minutes (default: 60)\n" +
+                          "- **Days:** Number of days to search ahead (default: 14)\n\n" +
+                          "I'll search for available slots during business hours (9 AM - 5 PM, Monday-Friday).";
+
+            await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+        }
+
+        private async Task HandleExampleSchedulingAsync(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+
+            try
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("🔍 Searching for available time slots... This may take a moment."), 
+                    cancellationToken);
+
+                // Create a sample availability request
+                var defaultDuration = _configuration.GetValue<int>("Scheduling:DefaultDurationMinutes", 60);
+                var searchDays = _configuration.GetValue<int>("Scheduling:SearchDays", 14);
+
+                var availabilityRequest = new AvailabilityRequest
+                {
+                    AttendeeEmails = new List<string> { "demo@example.com", "test@example.com" },
+                    StartDate = DateTime.Now.AddHours(1), // Start from next hour
+                    EndDate = DateTime.Now.AddDays(searchDays),
+                    DurationMinutes = defaultDuration,
+                    WorkingHoursStart = TimeSpan.Parse(_configuration["Scheduling:WorkingHours:StartTime"] ?? "09:00"),
+                    WorkingHoursEnd = TimeSpan.Parse(_configuration["Scheduling:WorkingHours:EndTime"] ?? "17:00")
+                };
+
+                // Convert working days from config
+                var workingDaysConfig = _configuration.GetSection("Scheduling:WorkingHours:WorkingDays").Get<string[]>();
+                if (workingDaysConfig != null)
+                {
+                    availabilityRequest.WorkingDays = workingDaysConfig
+                        .Select(day => Enum.Parse<DayOfWeek>(day))
+                        .ToList();
+                }
+
+                var schedulingResponse = await _schedulingService.FindAvailableTimeSlotsAsync(availabilityRequest, userId);
+
+                if (schedulingResponse.IsSuccess && schedulingResponse.HasAvailableSlots)
+                {
+                    var responseText = $"✅ **Found {schedulingResponse.AvailableSlots.Count} available time slots!**\n\n" +
+                                     $"**Search criteria:**\n" +
+                                     $"- Duration: {schedulingResponse.RequestedDurationMinutes} minutes\n" +
+                                     $"- Attendees: {string.Join(", ", schedulingResponse.AttendeeEmails)}\n" +
+                                     $"- Date range: {schedulingResponse.SearchStartDate:yyyy-MM-dd} to {schedulingResponse.SearchEndDate:yyyy-MM-dd}\n\n" +
+                                     $"**Available slots:**\n{schedulingResponse.FormattedSlotsText}\n\n" +
+                                     $"💡 *This was a demonstration with mock data. In a real scenario, I would check actual calendar availability.*";
+
+                    await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
+                }
+                else
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text($"❌ No available slots found: {schedulingResponse.Message}"), 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text($"❌ Error during scheduling: {ex.Message}"), 
+                    cancellationToken);
+            }
         }
 
         private async Task HandleHelpCommandAsync(
@@ -160,20 +269,26 @@ namespace InterviewSchedulingBot.Bots
             var isAuthenticated = await _authService.IsUserAuthenticatedAsync(userId);
 
             var helpText = "**Interview Scheduling Bot Commands:**\n\n" +
-                          "• **schedule** or **interview** - Start the interview scheduling process\n" +
+                          "• **schedule** or **interview** - Learn about scheduling options\n" +
+                          "• **find slots** - Find available time slots for multiple attendees\n" +
                           "• **help** - Show this help message\n";
 
             if (isAuthenticated)
             {
                 helpText += "• **logout** or **signout** - Sign out from your account\n\n" +
-                           "✅ You are currently signed in and can create calendar events.";
+                           "✅ You are currently signed in and can access calendar features.\n\n" +
+                           "**Scheduling Features:**\n" +
+                           "- Find common availability across multiple calendars\n" +
+                           "- Respect business hours and working days\n" +
+                           "- Create Teams meetings with calendar integration\n" +
+                           "- Smart conflict detection and resolution";
             }
             else
             {
                 helpText += "\n❌ You need to sign in first to use calendar features.";
             }
 
-            helpText += "\n\nI can help you create calendar events for interviews using Microsoft Graph integration.";
+            helpText += "\n\n💡 **Quick Start:** Type 'find slots' and then 'example demo' to see the scheduling assistant in action!";
 
             await turnContext.SendActivityAsync(MessageFactory.Text(helpText), cancellationToken);
         }
