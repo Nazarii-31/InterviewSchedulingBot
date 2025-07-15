@@ -11,6 +11,9 @@ namespace InterviewSchedulingBot.Interfaces
         Task<bool> UpdateEventAsync(string eventId, string userId, SchedulingRequest updatedRequest);
         Task<bool> DeleteEventAsync(string eventId, string userId);
 
+        // Free/busy information for scheduling
+        Task<Dictionary<string, List<AvailableTimeSlot>>> GetFreeBusyInformationAsync(List<string> attendeeEmails, DateTime startDate, DateTime endDate, string userId);
+
         // App-only authentication methods (for backward compatibility)
         Task<string> CreateInterviewEventAppOnlyAsync(SchedulingRequest request);
         Task<List<Event>> GetAvailableTimeSlotsAppOnlyAsync(string userEmail, DateTime startDate, DateTime endDate);

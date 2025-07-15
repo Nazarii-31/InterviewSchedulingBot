@@ -220,6 +220,110 @@ namespace InterviewSchedulingBot.Services
             }
         }
 
+        public async Task<Dictionary<string, List<AvailableTimeSlot>>> GetFreeBusyInformationAsync(List<string> attendeeEmails, DateTime startDate, DateTime endDate, string userId)
+        {
+            try
+            {
+                var graphClient = await GetUserGraphServiceClientAsync(userId);
+                var result = new Dictionary<string, List<AvailableTimeSlot>>();
+
+                // Initialize result dictionary
+                foreach (var email in attendeeEmails)
+                {
+                    result[email] = new List<AvailableTimeSlot>();
+                }
+
+                // For now, let's use a simpler approach - get calendar events for each attendee
+                // and convert them to busy time slots
+                foreach (var email in attendeeEmails)
+                {
+                    try
+                    {
+                        // Get the user's calendar events
+                        var events = await graphClient.Users[email]
+                            .Calendar
+                            .Events
+                            .GetAsync(requestConfiguration =>
+                            {
+                                requestConfiguration.QueryParameters.Filter = 
+                                    $"start/dateTime ge '{startDate:yyyy-MM-ddTHH:mm:ss.fffK}' and end/dateTime le '{endDate:yyyy-MM-ddTHH:mm:ss.fffK}'";
+                                requestConfiguration.QueryParameters.Select = new[] { "start", "end", "showAs" };
+                            });
+
+                        if (events?.Value != null)
+                        {
+                            var busySlots = new List<AvailableTimeSlot>();
+                            
+                            foreach (var eventItem in events.Value)
+                            {
+                                if (eventItem.Start?.DateTime != null && eventItem.End?.DateTime != null)
+                                {
+                                    // Parse the date strings
+                                    if (DateTime.TryParse(eventItem.Start.DateTime, out var eventStart) &&
+                                        DateTime.TryParse(eventItem.End.DateTime, out var eventEnd))
+                                    {
+                                        // Only consider events that show as busy
+                                        if (eventItem.ShowAs == FreeBusyStatus.Busy || 
+                                            eventItem.ShowAs == FreeBusyStatus.Oof ||
+                                            eventItem.ShowAs == FreeBusyStatus.Tentative)
+                                        {
+                                            busySlots.Add(new AvailableTimeSlot(eventStart, eventEnd));
+                                        }
+                                    }
+                                }
+                            }
+
+                            result[email] = MergeConsecutiveTimeSlots(busySlots);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // If we can't get calendar for this user, treat as completely free
+                        // Log the error but continue processing other attendees
+                        System.Diagnostics.Debug.WriteLine($"Could not get calendar for {email}: {ex.Message}");
+                        result[email] = new List<AvailableTimeSlot>();
+                    }
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to retrieve free/busy information: {ex.Message}", ex);
+            }
+        }
+
+        private List<AvailableTimeSlot> MergeConsecutiveTimeSlots(List<AvailableTimeSlot> timeSlots)
+        {
+            if (timeSlots.Count <= 1)
+                return timeSlots;
+
+            var merged = new List<AvailableTimeSlot>();
+            var sorted = timeSlots.OrderBy(ts => ts.StartTime).ToList();
+            
+            var current = sorted[0];
+            
+            for (int i = 1; i < sorted.Count; i++)
+            {
+                var next = sorted[i];
+                
+                if (current.EndTime >= next.StartTime)
+                {
+                    // Merge overlapping or consecutive slots
+                    current = new AvailableTimeSlot(current.StartTime, 
+                        next.EndTime > current.EndTime ? next.EndTime : current.EndTime);
+                }
+                else
+                {
+                    merged.Add(current);
+                    current = next;
+                }
+            }
+            
+            merged.Add(current);
+            return merged;
+        }
+
         // App-only authentication methods (for backward compatibility)
         public async Task<string> CreateInterviewEventAppOnlyAsync(SchedulingRequest request)
         {
