@@ -4,6 +4,7 @@ using InterviewSchedulingBot.Models;
 using Azure.Identity;
 using Microsoft.Graph.Authentication;
 using Microsoft.Kiota.Abstractions.Authentication;
+using InterviewSchedulingBot.Interfaces;
 
 namespace InterviewSchedulingBot.Services
 {
@@ -24,7 +25,7 @@ namespace InterviewSchedulingBot.Services
         public AllowedHostsValidator? AllowedHostsValidator { get; }
     }
 
-    public class GraphCalendarService
+    public class GraphCalendarService : IGraphCalendarService
     {
         private readonly IConfiguration _configuration;
         private readonly IAuthenticationService _authService;

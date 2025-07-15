@@ -2,17 +2,10 @@ using Microsoft.Identity.Client;
 using Microsoft.Bot.Builder;
 using Microsoft.Bot.Schema;
 using System.Collections.Concurrent;
+using InterviewSchedulingBot.Interfaces;
 
 namespace InterviewSchedulingBot.Services
 {
-    public interface IAuthenticationService
-    {
-        Task<string?> GetAccessTokenAsync(string userId);
-        Task StoreTokenAsync(string userId, string accessToken, string? refreshToken = null, DateTimeOffset? expiresOn = null);
-        Task<bool> IsUserAuthenticatedAsync(string userId);
-        Task ClearTokenAsync(string userId);
-        string GetAuthorizationUrl(string userId, string conversationId);
-    }
 
     public class AuthenticationService : IAuthenticationService
     {

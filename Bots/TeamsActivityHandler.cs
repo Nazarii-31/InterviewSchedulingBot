@@ -4,6 +4,7 @@ using Microsoft.Bot.Schema;
 using Microsoft.Bot.Schema.Teams;
 using InterviewSchedulingBot.Models;
 using InterviewSchedulingBot.Services;
+using InterviewSchedulingBot.Interfaces;
 using System.Text.Json;
 using Microsoft.Bot.Connector.Authentication;
 
@@ -11,11 +12,11 @@ namespace InterviewSchedulingBot.Bots
 {
     public class InterviewBot : TeamsActivityHandler
     {
-        private readonly GraphCalendarService _calendarService;
+        private readonly IGraphCalendarService _calendarService;
         private readonly IAuthenticationService _authService;
         private readonly IConfiguration _configuration;
 
-        public InterviewBot(GraphCalendarService calendarService, IAuthenticationService authService, IConfiguration configuration)
+        public InterviewBot(IGraphCalendarService calendarService, IAuthenticationService authService, IConfiguration configuration)
         {
             _calendarService = calendarService;
             _authService = authService;
