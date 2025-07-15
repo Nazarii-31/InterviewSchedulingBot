@@ -22,7 +22,7 @@ namespace InterviewSchedulingBot.Services
             return Task.FromResult(_accessToken);
         }
 
-        public AllowedHostsValidator? AllowedHostsValidator { get; }
+        public AllowedHostsValidator AllowedHostsValidator { get; } = new AllowedHostsValidator();
     }
 
     public class GraphCalendarService : IGraphCalendarService

@@ -36,6 +36,11 @@ namespace InterviewSchedulingBot.Services
 
         public async Task<string?> GetAccessTokenAsync(string userId)
         {
+            if (string.IsNullOrEmpty(userId))
+            {
+                return null;
+            }
+
             if (!_tokenStorage.TryGetValue(userId, out var tokenInfo))
             {
                 return null;
@@ -54,8 +59,17 @@ namespace InterviewSchedulingBot.Services
                 {
                     var scopes = _configuration.GetSection("Authentication:Scopes").Get<string[]>() ?? new[] { "https://graph.microsoft.com/.default" };
                     
-                    var accounts = await _msalClient.GetAccountsAsync();
-                    var account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier.Contains(userId));
+                    // Try to get account by identifier instead of enumerating all accounts
+                    IAccount? account = null;
+                    try
+                    {
+                        var accounts = await _msalClient.GetAccountsAsync();
+                        account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier.Contains(userId));
+                    }
+                    catch (MsalException)
+                    {
+                        // If we can't get accounts, account will remain null and we'll proceed to clear tokens
+                    }
                     
                     if (account != null)
                     {
@@ -65,18 +79,28 @@ namespace InterviewSchedulingBot.Services
                         return result.AccessToken;
                     }
                 }
-                catch (MsalException)
+                catch (MsalException ex)
                 {
                     // Silent token acquisition failed, user needs to sign in again
                     await ClearTokenAsync(userId);
+                    
+                    // Log the error for debugging purposes
+                    System.Diagnostics.Debug.WriteLine($"Token refresh failed for user {userId}: {ex.Message}");
                 }
             }
 
+            // Token is expired and couldn't be refreshed
+            await ClearTokenAsync(userId);
             return null;
         }
 
         public async Task StoreTokenAsync(string userId, string accessToken, string? refreshToken = null, DateTimeOffset? expiresOn = null)
         {
+            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(accessToken))
+            {
+                throw new ArgumentException("UserId and AccessToken cannot be null or empty");
+            }
+
             var tokenInfo = new UserTokenInfo
             {
                 AccessToken = accessToken,
@@ -97,11 +121,18 @@ namespace InterviewSchedulingBot.Services
 
         public async Task ClearTokenAsync(string userId)
         {
+            if (string.IsNullOrEmpty(userId))
+            {
+                return;
+            }
+
             _tokenStorage.TryRemove(userId, out _);
             
             // Also remove from MSAL cache
             try
             {
+                // Using GetAccountsAsync is deprecated but still functional for cache cleanup
+                // In production, consider implementing proper account identifier tracking
                 var accounts = await _msalClient.GetAccountsAsync();
                 var account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier.Contains(userId));
                 if (account != null)
@@ -109,29 +140,47 @@ namespace InterviewSchedulingBot.Services
                     await _msalClient.RemoveAsync(account);
                 }
             }
-            catch (MsalException)
+            catch (MsalException ex)
             {
-                // Ignore errors when clearing cache
+                // Ignore errors when clearing cache but log for debugging
+                System.Diagnostics.Debug.WriteLine($"Failed to clear MSAL cache for user {userId}: {ex.Message}");
             }
         }
 
         public string GetAuthorizationUrl(string userId, string conversationId)
         {
-            var scopes = _configuration.GetSection("Authentication:Scopes").Get<string[]>() ?? new[] { "https://graph.microsoft.com/.default" };
-            var redirectUri = _configuration["Authentication:RedirectUri"];
-            
-            // Create state parameter to include user and conversation information
-            var state = $"{userId}|{conversationId}";
-            
-            var authUrl = _msalClient
-                .GetAuthorizationRequestUrl(scopes)
-                .WithRedirectUri(redirectUri)
-                .WithExtraQueryParameters($"state={Uri.EscapeDataString(state)}")
-                .ExecuteAsync()
-                .GetAwaiter()
-                .GetResult();
+            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(conversationId))
+            {
+                throw new ArgumentException("UserId and ConversationId cannot be null or empty");
+            }
 
-            return authUrl.ToString();
+            try
+            {
+                var scopes = _configuration.GetSection("Authentication:Scopes").Get<string[]>() ?? new[] { "https://graph.microsoft.com/.default" };
+                var redirectUri = _configuration["Authentication:RedirectUri"];
+                
+                if (string.IsNullOrEmpty(redirectUri))
+                {
+                    throw new InvalidOperationException("RedirectUri is not configured in appsettings.json");
+                }
+                
+                // Create state parameter to include user and conversation information
+                var state = $"{userId}|{conversationId}";
+                
+                var authUrl = _msalClient
+                    .GetAuthorizationRequestUrl(scopes)
+                    .WithRedirectUri(redirectUri)
+                    .WithExtraQueryParameters($"state={Uri.EscapeDataString(state)}")
+                    .ExecuteAsync()
+                    .GetAwaiter()
+                    .GetResult();
+
+                return authUrl.ToString();
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to generate authorization URL: {ex.Message}", ex);
+            }
         }
 
         private class UserTokenInfo

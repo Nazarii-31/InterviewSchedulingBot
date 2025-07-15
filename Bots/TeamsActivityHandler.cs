@@ -88,34 +88,43 @@ namespace InterviewSchedulingBot.Bots
             ITurnContext<IMessageActivity> turnContext,
             CancellationToken cancellationToken)
         {
-            var userId = turnContext.Activity.From.Id;
-            var conversationId = turnContext.Activity.Conversation.Id;
-            
-            // Create sign-in card
-            var signInCard = new SigninCard
+            try
             {
-                Text = _configuration["Authentication:OAuthPrompt:Text"] ?? "Please sign in to access your calendar",
-                Buttons = new[]
+                var userId = turnContext.Activity.From.Id;
+                var conversationId = turnContext.Activity.Conversation.Id;
+                
+                // Create sign-in card
+                var signInCard = new SigninCard
                 {
-                    new CardAction
+                    Text = _configuration["Authentication:OAuthPrompt:Text"] ?? "Please sign in to access your calendar",
+                    Buttons = new[]
                     {
-                        Title = _configuration["Authentication:OAuthPrompt:Title"] ?? "Sign In",
-                        Type = ActionTypes.Signin,
-                        Value = _authService.GetAuthorizationUrl(userId, conversationId)
+                        new CardAction
+                        {
+                            Title = _configuration["Authentication:OAuthPrompt:Title"] ?? "Sign In",
+                            Type = ActionTypes.Signin,
+                            Value = _authService.GetAuthorizationUrl(userId, conversationId)
+                        }
                     }
-                }
-            };
+                };
 
-            var attachment = new Attachment
+                var attachment = new Attachment
+                {
+                    ContentType = SigninCard.ContentType,
+                    Content = signInCard
+                };
+
+                var reply = MessageFactory.Attachment(attachment);
+                reply.Text = "You need to sign in before I can help you with calendar operations.";
+
+                await turnContext.SendActivityAsync(reply, cancellationToken);
+            }
+            catch (Exception ex)
             {
-                ContentType = SigninCard.ContentType,
-                Content = signInCard
-            };
-
-            var reply = MessageFactory.Attachment(attachment);
-            reply.Text = "You need to sign in before I can help you with calendar operations.";
-
-            await turnContext.SendActivityAsync(reply, cancellationToken);
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text($"Sorry, I encountered an error setting up authentication. Please try again later. Error: {ex.Message}"), 
+                    cancellationToken);
+            }
         }
 
         private async Task HandleScheduleRequestAsync(
@@ -185,25 +194,42 @@ namespace InterviewSchedulingBot.Bots
             ITurnContext<IInvokeActivity> turnContext,
             CancellationToken cancellationToken)
         {
-            // Handle the OAuth callback from Teams
-            var tokenResponse = turnContext.Activity.Value as TokenResponse;
-            
-            if (tokenResponse != null && !string.IsNullOrEmpty(tokenResponse.Token))
+            try
             {
-                var userId = turnContext.Activity.From.Id;
+                // Handle the OAuth callback from Teams
+                var tokenResponse = turnContext.Activity.Value as TokenResponse;
                 
-                // Store the token
-                await _authService.StoreTokenAsync(userId, tokenResponse.Token);
+                if (tokenResponse != null && !string.IsNullOrEmpty(tokenResponse.Token))
+                {
+                    var userId = turnContext.Activity.From.Id;
+                    
+                    if (string.IsNullOrEmpty(userId))
+                    {
+                        await turnContext.SendActivityAsync(
+                            MessageFactory.Text("❌ Sign-in failed: Unable to identify user."), 
+                            cancellationToken);
+                        return;
+                    }
+                    
+                    // Store the token
+                    await _authService.StoreTokenAsync(userId, tokenResponse.Token);
 
-                var response = MessageFactory.Text("✅ Sign-in successful! You can now use the bot to schedule interviews. Type 'help' to see available commands.");
-                
-                await turnContext.SendActivityAsync(response, cancellationToken);
+                    var response = MessageFactory.Text("✅ Sign-in successful! You can now use the bot to schedule interviews. Type 'help' to see available commands.");
+                    
+                    await turnContext.SendActivityAsync(response, cancellationToken);
+                }
+                else
+                {
+                    var response = MessageFactory.Text("❌ Sign-in failed. Please try again.");
+                    
+                    await turnContext.SendActivityAsync(response, cancellationToken);
+                }
             }
-            else
+            catch (Exception ex)
             {
-                var response = MessageFactory.Text("❌ Sign-in failed. Please try again.");
-                
-                await turnContext.SendActivityAsync(response, cancellationToken);
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text($"❌ Sign-in process failed: {ex.Message}"), 
+                    cancellationToken);
             }
         }
 
@@ -211,18 +237,41 @@ namespace InterviewSchedulingBot.Bots
             ITurnContext<IEventActivity> turnContext,
             CancellationToken cancellationToken)
         {
-            // Handle token response from OAuth flow
-            var tokenResponse = turnContext.Activity.Value as TokenResponse;
-            
-            if (tokenResponse != null && !string.IsNullOrEmpty(tokenResponse.Token))
+            try
             {
-                var userId = turnContext.Activity.From.Id;
+                // Handle token response from OAuth flow
+                var tokenResponse = turnContext.Activity.Value as TokenResponse;
                 
-                // Store the token
-                await _authService.StoreTokenAsync(userId, tokenResponse.Token);
+                if (tokenResponse != null && !string.IsNullOrEmpty(tokenResponse.Token))
+                {
+                    var userId = turnContext.Activity.From.Id;
+                    
+                    if (string.IsNullOrEmpty(userId))
+                    {
+                        await turnContext.SendActivityAsync(
+                            MessageFactory.Text("❌ Authentication failed: Unable to identify user."), 
+                            cancellationToken);
+                        return;
+                    }
+                    
+                    // Store the token
+                    await _authService.StoreTokenAsync(userId, tokenResponse.Token);
 
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text("✅ Authentication successful! You can now schedule interviews."), 
+                        cancellationToken);
+                }
+                else
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text("❌ Authentication failed: No valid token received."), 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
                 await turnContext.SendActivityAsync(
-                    MessageFactory.Text("✅ Authentication successful! You can now schedule interviews."), 
+                    MessageFactory.Text($"❌ Authentication process failed: {ex.Message}"), 
                     cancellationToken);
             }
         }
