@@ -16,6 +16,9 @@ builder.Services.AddSingleton<BotFrameworkAuthentication, ConfigurationBotFramew
 // Create the Bot Adapter with error handling enabled.
 builder.Services.AddSingleton<IBotFrameworkHttpAdapter, InterviewSchedulingBot.AdapterWithErrorHandler>();
 
+// Register configuration validation service
+builder.Services.AddSingleton<ConfigurationValidationService>();
+
 // Register authentication service
 builder.Services.AddSingleton<IAuthenticationService, AuthenticationService>();
 
@@ -26,6 +29,16 @@ builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
 builder.Services.AddTransient<IBot, InterviewBot>();
 
 var app = builder.Build();
+
+// Validate configuration at startup
+var configValidator = app.Services.GetRequiredService<ConfigurationValidationService>();
+configValidator.LogConfigurationState();
+
+if (!configValidator.ValidateAuthenticationConfiguration())
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogWarning("Authentication configuration is incomplete. The bot will start but authentication features may not work properly.");
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())

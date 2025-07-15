@@ -66,10 +66,15 @@ The Azure AD app registration needs the following Microsoft Graph permissions:
 ## Running the Bot
 
 ```bash
+dotnet build
 dotnet run
 ```
 
-The bot will start and listen for incoming requests from Microsoft Teams.
+The bot will start and listen for incoming requests from Microsoft Teams. During startup, the configuration validation service will check all required settings and log their status.
+
+### Configuration Validation
+
+The bot includes automatic configuration validation at startup. If any required settings are missing, warnings will be logged to help identify configuration issues.
 
 ## Architecture
 
@@ -88,6 +93,10 @@ The bot will start and listen for incoming requests from Microsoft Teams.
 ## Development
 
 For detailed authentication implementation information, see [AUTHENTICATION.md](AUTHENTICATION.md).
+
+### Build Notes
+
+The project builds successfully with some deprecation warnings related to MSAL.NET account management methods. These warnings are acceptable and do not impact functionality. The deprecated methods are still functional and will be addressed in future MSAL.NET versions.
 
 ## Contributing
 
