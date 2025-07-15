@@ -3,6 +3,7 @@ using Microsoft.Bot.Builder.Integration.AspNet.Core;
 using Microsoft.Bot.Connector.Authentication;
 using InterviewSchedulingBot.Bots;
 using InterviewSchedulingBot.Services;
+using InterviewSchedulingBot.Interfaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,11 +16,14 @@ builder.Services.AddSingleton<BotFrameworkAuthentication, ConfigurationBotFramew
 // Create the Bot Adapter with error handling enabled.
 builder.Services.AddSingleton<IBotFrameworkHttpAdapter, InterviewSchedulingBot.AdapterWithErrorHandler>();
 
-// Create the bot as a transient. In this case the ASP Controller is expecting an IBot.
-builder.Services.AddTransient<IBot, InterviewBot>();
+// Register authentication service
+builder.Services.AddSingleton<IAuthenticationService, AuthenticationService>();
 
 // Register the Graph Calendar Service
-builder.Services.AddSingleton<GraphCalendarService>();
+builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
+
+// Create the bot as a transient. In this case the ASP Controller is expecting an IBot.
+builder.Services.AddTransient<IBot, InterviewBot>();
 
 var app = builder.Build();
 
