@@ -683,7 +683,8 @@ namespace InterviewSchedulingBot.Bots
                            "1. Search for optimal meeting times\n" +
                            "2. Review AI-suggested options with confidence scores\n" +
                            "3. Reply with 'book [number]' to book your preferred time\n" +
-                           "4. Receive confirmation with meeting details and Teams link";
+                           "4. Receive confirmation with meeting details and Teams link\n\n" +
+                           GetServiceModeMessage();
             }
             else
             {
@@ -691,6 +692,20 @@ namespace InterviewSchedulingBot.Bots
             }
 
             await turnContext.SendActivityAsync(MessageFactory.Text(helpText), cancellationToken);
+        }
+
+        private string GetServiceModeMessage()
+        {
+            var useMockService = _configuration.GetValue<bool>("GraphScheduling:UseMockService", false);
+            if (useMockService)
+            {
+                return "🧪 **Development Mode**: Using mock Graph API service (no Azure credentials required)\n" +
+                       "   _This provides realistic fake data for testing purposes_";
+            }
+            else
+            {
+                return "🔗 **Production Mode**: Using live Microsoft Graph API";
+            }
         }
 
         private async Task HandleLogoutAsync(
