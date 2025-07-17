@@ -16,6 +16,15 @@ builder.Services.AddSingleton<BotFrameworkAuthentication, ConfigurationBotFramew
 // Create the Bot Adapter with error handling enabled.
 builder.Services.AddSingleton<IBotFrameworkHttpAdapter, InterviewSchedulingBot.AdapterWithErrorHandler>();
 
+// Create the storage we'll be using for user and conversation state.
+builder.Services.AddSingleton<IStorage, MemoryStorage>();
+
+// Create the user state (used for dialog state).
+builder.Services.AddSingleton<UserState>();
+
+// Create the conversation state (used for dialog state).
+builder.Services.AddSingleton<ConversationState>();
+
 // Register configuration validation service
 builder.Services.AddSingleton<ConfigurationValidationService>();
 
