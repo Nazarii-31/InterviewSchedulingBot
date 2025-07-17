@@ -455,13 +455,21 @@ namespace InterviewSchedulingBot.Bots
                                        $"**📅 Meeting Details:**\n" +
                                        $"- **Title**: {bookingRequest.MeetingTitle}\n" +
                                        $"- **Date**: {startTime:dddd, MMMM dd, yyyy}\n" +
-                                       $"- **Time**: {startTime:HH:mm} - {endTime:HH:mm}\n" +
+                                       $"- **Time**: {startTime:HH:mm} - {endTime:HH:mm} UTC\n" +
+                                       $"- **Duration**: {(endTime - startTime).TotalMinutes} minutes\n" +
                                        $"- **Attendees**: {string.Join(", ", bookingRequest.AttendeeEmails)}\n" +
                                        $"- **Event ID**: {bookingResponse.EventId}\n\n" +
-                                       $"**🎯 Confidence**: {selectedSuggestion.Confidence * 100:F0}%\n" +
-                                       $"**💡 Reason**: {selectedSuggestion.SuggestionReason}\n\n" +
-                                       $"📧 **Calendar invites have been sent to all attendees.**\n" +
-                                       $"🔗 **Teams meeting link will be included in the calendar invite.**";
+                                       $"**🎯 AI Confidence**: {selectedSuggestion.Confidence * 100:F0}%\n" +
+                                       $"**💡 Scheduling Reason**: {selectedSuggestion.SuggestionReason}\n\n" +
+                                       $"**📧 Invitation Status:**\n" +
+                                       $"- ✅ Calendar invitations have been sent to all attendees via Microsoft Graph\n" +
+                                       $"- ✅ Teams meeting link automatically included in calendar invite\n" +
+                                       $"- ✅ Meeting appears in all attendees' calendars\n" +
+                                       $"- ✅ Attendees will receive email notifications\n\n" +
+                                       $"**🔗 Next Steps:**\n" +
+                                       $"- Check your Outlook calendar for the meeting details\n" +
+                                       $"- Teams meeting link will be available in the calendar event\n" +
+                                       $"- Attendees can respond to the meeting invitation";
 
                     await turnContext.SendActivityAsync(MessageFactory.Text(successMessage), cancellationToken);
 
