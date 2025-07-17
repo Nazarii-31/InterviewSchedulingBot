@@ -28,4 +28,21 @@ namespace InterviewSchedulingBot.Models
             return $"{StartTime:yyyy-MM-dd HH:mm} - {EndTime:HH:mm} ({DurationMinutes}min)";
         }
     }
+
+    // Simple TimeSlot class for GraphSchedulingService
+    public class TimeSlot
+    {
+        public DateTime StartTime { get; set; }
+        public DateTime EndTime { get; set; }
+        
+        public TimeSlot()
+        {
+        }
+        
+        public TimeSlot(DateTime startTime, DateTime endTime)
+        {
+            StartTime = startTime;
+            EndTime = endTime;
+        }
+    }
 }
