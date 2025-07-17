@@ -34,6 +34,28 @@ namespace InterviewSchedulingBot.Models
             }
         }
 
+        public string FormattedSuggestionsWithBookingText
+        {
+            get
+            {
+                if (!HasSuggestions)
+                    return "No meeting time suggestions available.";
+
+                var suggestions = MeetingTimeSuggestions.Take(10).Select((suggestion, index) => 
+                {
+                    var startTime = DateTime.Parse(suggestion.MeetingTimeSlot.Start.DateTime);
+                    var endTime = DateTime.Parse(suggestion.MeetingTimeSlot.End.DateTime);
+                    var confidence = suggestion.Confidence > 0 ? 
+                        $" (Confidence: {suggestion.Confidence * 100:F0}%)" : "";
+                    
+                    return $"**Option {index + 1}**: {startTime:ddd, MMM dd} from {startTime:HH:mm} to {endTime:HH:mm}{confidence}\n" +
+                           $"   _Reply with 'book {index + 1}' to book this time_";
+                });
+
+                return string.Join("\n\n", suggestions);
+            }
+        }
+
         public static GraphSchedulingResponse CreateSuccess(
             List<LocalMeetingTimeSuggestion> suggestions, 
             GraphSchedulingRequest request)

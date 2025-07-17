@@ -94,6 +94,49 @@ namespace InterviewSchedulingBot.Services
             }
         }
 
+        public async Task<BookingResponse> BookMeetingAsync(BookingRequest request, string userId)
+        {
+            try
+            {
+                if (!request.IsValid())
+                {
+                    return BookingResponse.CreateFailure(
+                        "Invalid booking request parameters", 
+                        request);
+                }
+
+                var accessToken = await _authService.GetAccessTokenAsync(userId);
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    return BookingResponse.CreateFailure(
+                        "User authentication required", 
+                        request);
+                }
+
+                // Book the meeting using the calendar service
+                var eventId = await _graphCalendarService.BookMeetingFromSuggestionAsync(
+                    request.SelectedSuggestion, 
+                    request.AttendeeEmails, 
+                    request.MeetingTitle, 
+                    userId);
+
+                if (string.IsNullOrEmpty(eventId))
+                {
+                    return BookingResponse.CreateFailure(
+                        "Failed to create meeting event", 
+                        request);
+                }
+
+                return BookingResponse.CreateSuccess(eventId, request);
+            }
+            catch (Exception ex)
+            {
+                return BookingResponse.CreateFailure(
+                    $"Error booking meeting: {ex.Message}", 
+                    request);
+            }
+        }
+
         private GetSchedulePostRequestBody CreateGetScheduleRequest(GraphSchedulingRequest request)
         {
             var requestBody = new GetSchedulePostRequestBody
