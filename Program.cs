@@ -25,6 +25,9 @@ builder.Services.AddSingleton<IAuthenticationService, AuthenticationService>();
 // Register the Graph Calendar Service
 builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
 
+// Register the Scheduling Service
+builder.Services.AddSingleton<ISchedulingService, SchedulingService>();
+
 // Create the bot as a transient. In this case the ASP Controller is expecting an IBot.
 builder.Services.AddTransient<IBot, InterviewBot>();
 
