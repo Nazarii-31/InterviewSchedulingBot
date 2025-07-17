@@ -1,10 +1,12 @@
 using Microsoft.Bot.Builder;
 using Microsoft.Bot.Builder.Teams;
+using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Schema;
 using Microsoft.Bot.Schema.Teams;
 using InterviewSchedulingBot.Models;
 using InterviewSchedulingBot.Services;
 using InterviewSchedulingBot.Interfaces;
+using InterviewSchedulingBot.Dialogs;
 using System.Text.Json;
 using System.Text;
 using Microsoft.Bot.Connector.Authentication;
@@ -19,6 +21,9 @@ namespace InterviewSchedulingBot.Bots
         private readonly IGraphSchedulingService _graphSchedulingService;
         private readonly IAISchedulingService _aiSchedulingService;
         private readonly IConfiguration _configuration;
+        private readonly Dialog _dialog;
+        private readonly BotState _conversationState;
+        private readonly BotState _userState;
 
         // Dictionary to store current scheduling sessions by user ID
         private static readonly Dictionary<string, GraphSchedulingResponse> _currentSchedulingSessions = new();
@@ -28,8 +33,9 @@ namespace InterviewSchedulingBot.Bots
             IAuthenticationService authService, 
             ISchedulingService schedulingService,
             IGraphSchedulingService graphSchedulingService,
-            IAISchedulingService aiSchedulingService,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ConversationState conversationState,
+            UserState userState)
         {
             _calendarService = calendarService;
             _authService = authService;
@@ -37,6 +43,9 @@ namespace InterviewSchedulingBot.Bots
             _graphSchedulingService = graphSchedulingService;
             _aiSchedulingService = aiSchedulingService;
             _configuration = configuration;
+            _conversationState = conversationState;
+            _userState = userState;
+            _dialog = new InterviewSchedulingDialog(schedulingService, graphSchedulingService, configuration);
         }
 
         protected override async Task OnMembersAddedAsync(
@@ -54,6 +63,15 @@ namespace InterviewSchedulingBot.Bots
                     await turnContext.SendActivityAsync(MessageFactory.Text(welcomeText), cancellationToken);
                 }
             }
+        }
+
+        public override async Task OnTurnAsync(ITurnContext turnContext, CancellationToken cancellationToken = default)
+        {
+            await base.OnTurnAsync(turnContext, cancellationToken);
+
+            // Save any state changes that might have occurred during the turn.
+            await _conversationState.SaveChangesAsync(turnContext, false, cancellationToken);
+            await _userState.SaveChangesAsync(turnContext, false, cancellationToken);
         }
 
         protected override async Task OnMessageActivityAsync(
@@ -79,7 +97,17 @@ namespace InterviewSchedulingBot.Bots
                 return;
             }
 
-            // Handle different commands
+            // Check if user wants to start the conversational dialog
+            if (userMessage.ToLower().Contains("schedule interview") || 
+                userMessage.ToLower().Contains("start interview") ||
+                userMessage.ToLower().Contains("new interview") ||
+                userMessage.ToLower().Contains("conversational"))
+            {
+                await RunDialogAsync(turnContext, cancellationToken);
+                return;
+            }
+
+            // Handle other commands (keep existing functionality)
             if (userMessage.ToLower().Contains("schedule") || userMessage.ToLower().Contains("interview"))
             {
                 await HandleScheduleRequestAsync(turnContext, cancellationToken);
@@ -122,9 +150,24 @@ namespace InterviewSchedulingBot.Bots
             }
             else
             {
-                await turnContext.SendActivityAsync(
-                    MessageFactory.Text($"I received your message: '{userMessage}'. Type 'help' to see available commands."), 
-                    cancellationToken);
+                // Try to continue any existing dialog first
+                await RunDialogAsync(turnContext, cancellationToken);
+            }
+        }
+
+        private async Task RunDialogAsync(ITurnContext turnContext, CancellationToken cancellationToken)
+        {
+            // Create a dialog context
+            var dialogSet = new DialogSet(_conversationState.CreateProperty<DialogState>(nameof(DialogState)));
+            dialogSet.Add(_dialog);
+
+            var dialogContext = await dialogSet.CreateContextAsync(turnContext, cancellationToken);
+            var results = await dialogContext.ContinueDialogAsync(cancellationToken);
+            
+            // If no dialog is running, start the main dialog
+            if (results.Status == DialogTurnStatus.Empty)
+            {
+                await dialogContext.BeginDialogAsync(_dialog.Id, null, cancellationToken);
             }
         }
 
@@ -955,6 +998,13 @@ namespace InterviewSchedulingBot.Bots
             {
                 helpText += "• **logout** or **signout** - Sign out from your account\n\n" +
                            "✅ You are currently signed in and can access all features.\n\n" +
+                           "**🌟 Recommended: Try the Conversational Dialog!**\n" +
+                           "Type 'schedule interview' for a guided, step-by-step experience that:\n" +
+                           "- Greets you personally\n" +
+                           "- Asks for attendee emails\n" +
+                           "- Requests meeting duration\n" +
+                           "- Finds optimal time slots\n" +
+                           "- Helps you book the meeting\n\n" +
                            "**🤖 AI-Driven Scheduling Features:**\n" +
                            "- Uses Microsoft Graph's intelligent algorithms\n" +
                            "- Finds optimal meeting times based on attendee preferences\n" +
@@ -967,15 +1017,10 @@ namespace InterviewSchedulingBot.Bots
                            "- Create Teams meetings with calendar integration\n" +
                            "- Basic conflict detection\n\n" +
                            "**🚀 Quick Start:**\n" +
-                           "1. Type 'find optimal' for AI-driven scheduling\n" +
-                           "2. Type 'optimal demo' to see AI scheduling in action\n" +
-                           "3. After seeing suggestions, type 'book [number]' to book\n" +
-                           "4. Type 'find slots' then 'example demo' for basic scheduling\n\n" +
-                           "**📋 Booking Process:**\n" +
-                           "1. Search for optimal meeting times\n" +
-                           "2. Review AI-suggested options with confidence scores\n" +
-                           "3. Reply with 'book [number]' to book your preferred time\n" +
-                           "4. Receive confirmation with meeting details and Teams link\n\n" +
+                           "1. Type 'schedule interview' for the guided experience\n" +
+                           "2. Follow the prompts to enter attendee emails and duration\n" +
+                           "3. Choose from AI-suggested optimal times\n" +
+                           "4. Confirm and book your meeting\n\n" +
                            GetServiceModeMessage();
             }
             else

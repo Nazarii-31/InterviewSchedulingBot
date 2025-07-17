@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Bot.Builder" Version="4.21.2" />
     <PackageReference Include="Microsoft.Bot.Builder.Integration.AspNet.Core" Version="4.21.2" />
+    <PackageReference Include="Microsoft.Bot.Builder.Dialogs" Version="4.21.2" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="8.0.0" />
     <PackageReference Include="Microsoft.Graph" Version="5.45.0" />
     <PackageReference Include="Azure.Identity" Version="1.12.0" />
