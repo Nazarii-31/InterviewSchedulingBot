@@ -1,0 +1,118 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.16",
+  "version": "1.0.0",
+  "id": "{{MICROSOFT_APP_ID}}",
+  "packageName": "com.interviewschedulingbot",
+  "developer": {
+    "name": "Interview Scheduling Bot",
+    "websiteUrl": "https://github.com/Nazarii-31/InterviewSchedulingBot",
+    "privacyUrl": "https://github.com/Nazarii-31/InterviewSchedulingBot/blob/main/README.md",
+    "termsOfUseUrl": "https://github.com/Nazarii-31/InterviewSchedulingBot/blob/main/README.md"
+  },
+  "name": {
+    "short": "Interview Scheduling Bot",
+    "full": "Interview Scheduling Bot - AI-Powered Calendar Assistant"
+  },
+  "description": {
+    "short": "AI-powered bot for scheduling interviews with Microsoft Graph integration",
+    "full": "A Microsoft Teams bot that helps schedule interviews by managing calendar events through Microsoft Graph API with secure user authentication. Features include AI-driven scheduling, calendar integration, and automatic Teams meeting creation."
+  },
+  "icons": {
+    "outline": "icon-outline.png",
+    "color": "icon-color.png"
+  },
+  "accentColor": "#0078D4",
+  "bots": [
+    {
+      "botId": "{{MICROSOFT_APP_ID}}",
+      "scopes": [
+        "personal",
+        "team",
+        "groupchat"
+      ],
+      "supportsFiles": false,
+      "isNotificationOnly": false,
+      "supportsCalling": false,
+      "supportsVideo": false,
+      "commandLists": [
+        {
+          "scopes": [
+            "personal",
+            "team",
+            "groupchat"
+          ],
+          "commands": [
+            {
+              "title": "Schedule Interview",
+              "description": "Start the interview scheduling process with AI-driven optimization"
+            },
+            {
+              "title": "Find Optimal Times",
+              "description": "Use AI to find optimal meeting times based on attendee availability"
+            },
+            {
+              "title": "Find Slots",
+              "description": "Find available time slots for scheduling meetings"
+            },
+            {
+              "title": "Help",
+              "description": "Show available commands and authentication status"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "permissions": [
+    "identity",
+    "messageTeamMembers"
+  ],
+  "validDomains": [
+    "token.botframework.com",
+    "login.microsoftonline.com",
+    "graph.microsoft.com"
+  ],
+  "webApplicationInfo": {
+    "id": "{{MICROSOFT_APP_ID}}",
+    "resource": "https://graph.microsoft.com/"
+  },
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        {
+          "name": "ChannelMessage.Read.Group",
+          "type": "Application"
+        },
+        {
+          "name": "ChannelMessage.Send.Group",
+          "type": "Application"
+        },
+        {
+          "name": "TeamMember.Read.Group",
+          "type": "Application"
+        }
+      ]
+    }
+  },
+  "showLoadingIndicator": false,
+  "isFullScreen": false,
+  "activities": {
+    "activityTypes": [
+      {
+        "type": "message",
+        "context": [
+          "personal",
+          "team",
+          "groupchat"
+        ]
+      }
+    ]
+  },
+  "defaultInstallScope": "personal",
+  "defaultGroupCapability": {
+    "personal": "bot",
+    "team": "bot",
+    "groupchat": "bot"
+  }
+}
