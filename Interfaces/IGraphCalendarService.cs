@@ -14,6 +14,9 @@ namespace InterviewSchedulingBot.Interfaces
         // Free/busy information for scheduling
         Task<Dictionary<string, List<AvailableTimeSlot>>> GetFreeBusyInformationAsync(List<string> attendeeEmails, DateTime startDate, DateTime endDate, string userId);
 
+        // Meeting booking from suggestions
+        Task<string> BookMeetingFromSuggestionAsync(InterviewSchedulingBot.Models.MeetingTimeSuggestion suggestion, List<string> attendeeEmails, string meetingTitle, string userId);
+
         // App-only authentication methods (for backward compatibility)
         Task<string> CreateInterviewEventAppOnlyAsync(SchedulingRequest request);
         Task<List<Event>> GetAvailableTimeSlotsAppOnlyAsync(string userEmail, DateTime startDate, DateTime endDate);

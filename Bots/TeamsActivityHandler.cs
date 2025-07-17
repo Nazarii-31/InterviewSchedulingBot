@@ -18,6 +18,9 @@ namespace InterviewSchedulingBot.Bots
         private readonly IGraphSchedulingService _graphSchedulingService;
         private readonly IConfiguration _configuration;
 
+        // Dictionary to store current scheduling sessions by user ID
+        private static readonly Dictionary<string, GraphSchedulingResponse> _currentSchedulingSessions = new();
+
         public InterviewBot(
             IGraphCalendarService calendarService, 
             IAuthenticationService authService, 
@@ -88,6 +91,10 @@ namespace InterviewSchedulingBot.Bots
             else if (userMessage.ToLower().Contains("find") && userMessage.ToLower().Contains("optimal"))
             {
                 await HandleFindOptimalTimesRequestAsync(turnContext, cancellationToken);
+            }
+            else if (userMessage.ToLower().StartsWith("book"))
+            {
+                await HandleBookMeetingRequestAsync(turnContext, cancellationToken);
             }
             else if (userMessage.ToLower().Contains("help"))
             {
@@ -285,18 +292,22 @@ namespace InterviewSchedulingBot.Bots
 
                 if (graphSchedulingResponse.IsSuccess && graphSchedulingResponse.HasSuggestions)
                 {
+                    // Store the current scheduling session for demo
+                    _currentSchedulingSessions[userId] = graphSchedulingResponse;
+
                     var responseText = $"✅ **AI Found {graphSchedulingResponse.MeetingTimeSuggestions.Count} Optimal Meeting Times!**\n\n" +
                                      $"**Search Criteria:**\n" +
                                      $"- Duration: {graphSchedulingRequest.DurationMinutes} minutes\n" +
                                      $"- Attendees: {string.Join(", ", graphSchedulingRequest.AttendeeEmails)}\n" +
                                      $"- Date Range: {graphSchedulingRequest.StartDate:yyyy-MM-dd} to {graphSchedulingRequest.EndDate:yyyy-MM-dd}\n\n" +
-                                     $"**🤖 AI-Suggested Optimal Times:**\n{graphSchedulingResponse.FormattedSuggestionsText}\n\n" +
+                                     $"**🤖 AI-Suggested Optimal Times:**\n{graphSchedulingResponse.FormattedSuggestionsWithBookingText}\n\n" +
                                      $"💡 **AI Advantages:**\n" +
                                      $"- Intelligent conflict detection\n" +
                                      $"- Optimized for productivity\n" +
                                      $"- Considers working hours and preferences\n" +
                                      $"- Confidence scoring for each suggestion\n\n" +
-                                     $"*This was a demonstration. In production, I would analyze real calendar data using Microsoft Graph's advanced scheduling algorithms.*";
+                                     $"**📅 To book a meeting**: Reply with 'book [number]' (e.g., 'book 1' for the first option)\n\n" +
+                                     $"*This is a demonstration. In production, I would analyze real calendar data using Microsoft Graph's advanced scheduling algorithms.*";
 
                     await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
                 }
@@ -343,9 +354,14 @@ namespace InterviewSchedulingBot.Bots
 
                 if (graphSchedulingResponse.IsSuccess && graphSchedulingResponse.HasSuggestions)
                 {
+                    // Store the current scheduling session
+                    _currentSchedulingSessions[userId] = graphSchedulingResponse;
+
                     var responseText = $"✅ **AI Found {graphSchedulingResponse.MeetingTimeSuggestions.Count} Optimal Meeting Times!**\n\n" +
-                                     $"**🤖 AI-Suggested Times:**\n{graphSchedulingResponse.FormattedSuggestionsText}\n\n" +
-                                     $"💡 These suggestions are optimized by Microsoft Graph's AI algorithms for maximum productivity and minimal conflicts.";
+                                     $"**🤖 AI-Suggested Times:**\n{graphSchedulingResponse.FormattedSuggestionsWithBookingText}\n\n" +
+                                     $"💡 These suggestions are optimized by Microsoft Graph's AI algorithms for maximum productivity and minimal conflicts.\n\n" +
+                                     $"**📅 To book a meeting**: Reply with 'book [number]' (e.g., 'book 1' for the first option)\n" +
+                                     $"**📋 Meeting title**: I'll use 'Team Interview Meeting' as the default title.";
 
                     await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
                 }
@@ -360,6 +376,109 @@ namespace InterviewSchedulingBot.Bots
             {
                 await turnContext.SendActivityAsync(
                     MessageFactory.Text($"❌ Error processing AI scheduling request: {ex.Message}"), 
+                    cancellationToken);
+            }
+        }
+
+        private async Task HandleBookMeetingRequestAsync(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+            var userMessage = turnContext.Activity.Text ?? "";
+
+            try
+            {
+                // Check if user has a current scheduling session
+                if (!_currentSchedulingSessions.ContainsKey(userId))
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text("❌ No active scheduling session found. Please search for meeting times first using 'find optimal'."), 
+                        cancellationToken);
+                    return;
+                }
+
+                // Parse the book command to get the selection number
+                var bookMatch = System.Text.RegularExpressions.Regex.Match(userMessage.ToLower(), @"book\s+(\d+)");
+                if (!bookMatch.Success)
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text("❌ Invalid booking command. Please use 'book [number]' (e.g., 'book 1')."), 
+                        cancellationToken);
+                    return;
+                }
+
+                var selectionNumber = int.Parse(bookMatch.Groups[1].Value);
+                var schedulingSession = _currentSchedulingSessions[userId];
+
+                if (selectionNumber < 1 || selectionNumber > schedulingSession.MeetingTimeSuggestions.Count)
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text($"❌ Invalid selection. Please choose a number between 1 and {schedulingSession.MeetingTimeSuggestions.Count}."), 
+                        cancellationToken);
+                    return;
+                }
+
+                var selectedSuggestion = schedulingSession.MeetingTimeSuggestions[selectionNumber - 1];
+
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("📅 **Booking your meeting...**"), 
+                    cancellationToken);
+
+                // Create booking request
+                var bookingRequest = new BookingRequest
+                {
+                    SelectedSuggestion = selectedSuggestion,
+                    AttendeeEmails = schedulingSession.OriginalRequest?.AttendeeEmails ?? new List<string>(),
+                    MeetingTitle = "Team Interview Meeting",
+                    MeetingDescription = "Meeting scheduled via AI-driven scheduling assistant"
+                };
+
+                // Book the meeting
+                var bookingResponse = await _graphSchedulingService.BookMeetingAsync(bookingRequest, userId);
+
+                if (bookingResponse.IsSuccess)
+                {
+                    if (selectedSuggestion.MeetingTimeSlot?.Start?.DateTime == null || 
+                        selectedSuggestion.MeetingTimeSlot?.End?.DateTime == null)
+                    {
+                        await turnContext.SendActivityAsync(
+                            MessageFactory.Text("❌ Invalid meeting time data in selected suggestion."), 
+                            cancellationToken);
+                        return;
+                    }
+
+                    var startTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.Start.DateTime);
+                    var endTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.End.DateTime);
+
+                    var successMessage = $"✅ **Meeting Booked Successfully!**\n\n" +
+                                       $"**📅 Meeting Details:**\n" +
+                                       $"- **Title**: {bookingRequest.MeetingTitle}\n" +
+                                       $"- **Date**: {startTime:dddd, MMMM dd, yyyy}\n" +
+                                       $"- **Time**: {startTime:HH:mm} - {endTime:HH:mm}\n" +
+                                       $"- **Attendees**: {string.Join(", ", bookingRequest.AttendeeEmails)}\n" +
+                                       $"- **Event ID**: {bookingResponse.EventId}\n\n" +
+                                       $"**🎯 Confidence**: {selectedSuggestion.Confidence * 100:F0}%\n" +
+                                       $"**💡 Reason**: {selectedSuggestion.SuggestionReason}\n\n" +
+                                       $"📧 **Calendar invites have been sent to all attendees.**\n" +
+                                       $"🔗 **Teams meeting link will be included in the calendar invite.**";
+
+                    await turnContext.SendActivityAsync(MessageFactory.Text(successMessage), cancellationToken);
+
+                    // Clear the scheduling session
+                    _currentSchedulingSessions.Remove(userId);
+                }
+                else
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text($"❌ Failed to book meeting: {bookingResponse.Message}"), 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text($"❌ Error booking meeting: {ex.Message}"), 
                     cancellationToken);
             }
         }
@@ -537,6 +656,7 @@ namespace InterviewSchedulingBot.Bots
                           "• **schedule** or **interview** - Learn about scheduling options\n" +
                           "• **ai schedule** or **find optimal** - Use AI-driven intelligent scheduling ✨\n" +
                           "• **find slots** - Find available time slots (basic scheduling)\n" +
+                          "• **book [number]** - Book a meeting from the suggestions (e.g., 'book 1')\n" +
                           "• **help** - Show this help message\n";
 
             if (isAuthenticated)
@@ -548,7 +668,8 @@ namespace InterviewSchedulingBot.Bots
                            "- Finds optimal meeting times based on attendee preferences\n" +
                            "- Smart conflict detection and resolution\n" +
                            "- Confidence scoring for each suggestion\n" +
-                           "- Respects working hours and time zones\n\n" +
+                           "- Respects working hours and time zones\n" +
+                           "- One-click booking with Teams integration\n\n" +
                            "**📅 Basic Scheduling Features:**\n" +
                            "- Find common availability across multiple calendars\n" +
                            "- Create Teams meetings with calendar integration\n" +
@@ -556,7 +677,13 @@ namespace InterviewSchedulingBot.Bots
                            "**🚀 Quick Start:**\n" +
                            "1. Type 'find optimal' for AI-driven scheduling\n" +
                            "2. Type 'optimal demo' to see AI scheduling in action\n" +
-                           "3. Type 'find slots' then 'example demo' for basic scheduling";
+                           "3. After seeing suggestions, type 'book [number]' to book\n" +
+                           "4. Type 'find slots' then 'example demo' for basic scheduling\n\n" +
+                           "**📋 Booking Process:**\n" +
+                           "1. Search for optimal meeting times\n" +
+                           "2. Review AI-suggested options with confidence scores\n" +
+                           "3. Reply with 'book [number]' to book your preferred time\n" +
+                           "4. Receive confirmation with meeting details and Teams link";
             }
             else
             {

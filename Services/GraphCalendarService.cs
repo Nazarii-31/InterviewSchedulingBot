@@ -324,6 +324,70 @@ namespace InterviewSchedulingBot.Services
             return merged;
         }
 
+        public async Task<string> BookMeetingFromSuggestionAsync(InterviewSchedulingBot.Models.MeetingTimeSuggestion suggestion, List<string> attendeeEmails, string meetingTitle, string userId)
+        {
+            try
+            {
+                var graphClient = await GetUserGraphServiceClientAsync(userId);
+
+                if (suggestion.MeetingTimeSlot?.Start?.DateTime == null || 
+                    suggestion.MeetingTimeSlot?.End?.DateTime == null)
+                {
+                    throw new ArgumentException("Invalid meeting time data in suggestion");
+                }
+
+                var startTime = DateTime.Parse(suggestion.MeetingTimeSlot.Start.DateTime);
+                var endTime = DateTime.Parse(suggestion.MeetingTimeSlot.End.DateTime);
+
+                var newEvent = new Event
+                {
+                    Subject = meetingTitle,
+                    Body = new ItemBody
+                    {
+                        ContentType = BodyType.Html,
+                        Content = $"<p>Meeting scheduled via AI-driven scheduling</p>" +
+                                 $"<p>Attendees: {string.Join(", ", attendeeEmails)}</p>" +
+                                 $"<p>Duration: {(endTime - startTime).TotalMinutes} minutes</p>" +
+                                 $"<p>Confidence: {suggestion.Confidence * 100:F0}%</p>" +
+                                 $"<p>Suggestion Reason: {suggestion.SuggestionReason}</p>"
+                    },
+                    Start = new DateTimeTimeZone
+                    {
+                        DateTime = startTime.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),
+                        TimeZone = suggestion.MeetingTimeSlot.Start.TimeZone ?? "UTC"
+                    },
+                    End = new DateTimeTimeZone
+                    {
+                        DateTime = endTime.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),
+                        TimeZone = suggestion.MeetingTimeSlot.End.TimeZone ?? "UTC"
+                    },
+                    Attendees = attendeeEmails.Select(email => new Attendee
+                    {
+                        EmailAddress = new EmailAddress
+                        {
+                            Address = email,
+                            Name = email.Split('@')[0] // Use part before @ as name
+                        },
+                        Type = AttendeeType.Required
+                    }).ToList(),
+                    IsOnlineMeeting = true,
+                    OnlineMeetingProvider = OnlineMeetingProviderType.TeamsForBusiness
+                };
+
+                // Create the event in the user's calendar (delegated permission)
+                var createdEvent = await graphClient.Me
+                    .Calendar
+                    .Events
+                    .PostAsync(newEvent);
+
+                return createdEvent?.Id ?? "Event created but ID not available";
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Failed to book meeting from suggestion: {ex.Message}", ex);
+            }
+        }
+
         // App-only authentication methods (for backward compatibility)
         public async Task<string> CreateInterviewEventAppOnlyAsync(SchedulingRequest request)
         {
