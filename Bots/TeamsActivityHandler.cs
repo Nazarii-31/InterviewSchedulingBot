@@ -6,6 +6,7 @@ using InterviewSchedulingBot.Models;
 using InterviewSchedulingBot.Services;
 using InterviewSchedulingBot.Interfaces;
 using System.Text.Json;
+using System.Text;
 using Microsoft.Bot.Connector.Authentication;
 
 namespace InterviewSchedulingBot.Bots
@@ -16,6 +17,7 @@ namespace InterviewSchedulingBot.Bots
         private readonly IAuthenticationService _authService;
         private readonly ISchedulingService _schedulingService;
         private readonly IGraphSchedulingService _graphSchedulingService;
+        private readonly IAISchedulingService _aiSchedulingService;
         private readonly IConfiguration _configuration;
 
         // Dictionary to store current scheduling sessions by user ID
@@ -26,12 +28,14 @@ namespace InterviewSchedulingBot.Bots
             IAuthenticationService authService, 
             ISchedulingService schedulingService,
             IGraphSchedulingService graphSchedulingService,
+            IAISchedulingService aiSchedulingService,
             IConfiguration configuration)
         {
             _calendarService = calendarService;
             _authService = authService;
             _schedulingService = schedulingService;
             _graphSchedulingService = graphSchedulingService;
+            _aiSchedulingService = aiSchedulingService;
             _configuration = configuration;
         }
 
@@ -84,6 +88,10 @@ namespace InterviewSchedulingBot.Bots
             {
                 await HandleAIScheduleRequestAsync(turnContext, cancellationToken);
             }
+            else if (userMessage.ToLower().Contains("smart") && userMessage.ToLower().Contains("schedule"))
+            {
+                await HandleSmartScheduleRequestAsync(turnContext, cancellationToken);
+            }
             else if (userMessage.ToLower().Contains("find") && userMessage.ToLower().Contains("slots"))
             {
                 await HandleFindSlotsRequestAsync(turnContext, cancellationToken);
@@ -91,6 +99,14 @@ namespace InterviewSchedulingBot.Bots
             else if (userMessage.ToLower().Contains("find") && userMessage.ToLower().Contains("optimal"))
             {
                 await HandleFindOptimalTimesRequestAsync(turnContext, cancellationToken);
+            }
+            else if (userMessage.ToLower().Contains("ai") && userMessage.ToLower().Contains("demo"))
+            {
+                await HandleAIDemoRequestAsync(turnContext, cancellationToken);
+            }
+            else if (userMessage.ToLower().Contains("insights"))
+            {
+                await HandleInsightsRequestAsync(turnContext, cancellationToken);
             }
             else if (userMessage.ToLower().StartsWith("book"))
             {
@@ -653,6 +669,268 @@ namespace InterviewSchedulingBot.Bots
             }
         }
 
+        private async Task HandleSmartScheduleRequestAsync(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+            var userMessage = turnContext.Activity.Text ?? "";
+
+            try
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("🤖 **Smart AI Scheduling** - Analyzing your preferences and calendar patterns..."), 
+                    cancellationToken);
+
+                // Parse smart scheduling request
+                var aiRequest = ParseSmartSchedulingRequest(userMessage, userId);
+                if (aiRequest == null)
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text("❌ Invalid format. Please use: `john@company.com, jane@company.com | smart | duration:60 | days:7`"), 
+                        cancellationToken);
+                    return;
+                }
+
+                // Use AI scheduling service
+                var aiResponse = await _aiSchedulingService.FindOptimalMeetingTimesAsync(aiRequest);
+
+                if (aiResponse.IsSuccess && aiResponse.HasPredictions)
+                {
+                    var responseText = $"✅ **AI Found {aiResponse.PredictedTimeSlots.Count} Smart Scheduling Options!**\n\n" +
+                                     $"**🧠 AI Analysis:**\n" +
+                                     $"- Overall Confidence: {aiResponse.OverallConfidence * 100:F0}%\n" +
+                                     $"- Processing Time: {aiResponse.ProcessingTimeMs}ms\n" +
+                                     $"- Algorithm: {aiResponse.AlgorithmVersion}\n\n" +
+                                     $"**🎯 Smart Predictions:**\n" +
+                                     FormatAIPredictions(aiResponse.PredictedTimeSlots) + "\n\n" +
+                                     $"**💡 AI Recommendations:**\n" +
+                                     string.Join("\n", aiResponse.Recommendations.Select(r => $"• {r}")) + "\n\n" +
+                                     $"**📅 To book**: Reply with 'book [number]' (e.g., 'book 1')";
+
+                    await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
+                }
+                else
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text($"❌ AI Scheduling failed: {aiResponse.Message}"), 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text($"❌ Error in smart scheduling: {ex.Message}"), 
+                    cancellationToken);
+            }
+        }
+
+        private async Task HandleAIDemoRequestAsync(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+
+            try
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("🔬 **AI Scheduling Demo** - Showcasing advanced machine learning capabilities..."), 
+                    cancellationToken);
+
+                // Create demo AI request
+                var aiRequest = new AISchedulingRequest
+                {
+                    UserId = userId,
+                    AttendeeEmails = new List<string> { "demo@company.com", "ai-test@company.com" },
+                    StartDate = DateTime.Now.AddHours(1),
+                    EndDate = DateTime.Now.AddDays(7),
+                    DurationMinutes = 60,
+                    UseLearningAlgorithm = true,
+                    UseHistoricalData = true,
+                    UseUserPreferences = true,
+                    UseAttendeePatterns = true,
+                    OptimizeForProductivity = true,
+                    MaxSuggestions = 5
+                };
+
+                var aiResponse = await _aiSchedulingService.FindOptimalMeetingTimesAsync(aiRequest);
+
+                if (aiResponse.IsSuccess && aiResponse.HasPredictions)
+                {
+                    var insights = await _aiSchedulingService.GetAIInsightsAsync(userId);
+                    
+                    var responseText = $"✅ **AI Demo Results - Advanced Scheduling Intelligence**\n\n" +
+                                     $"**🤖 Machine Learning Analysis:**\n" +
+                                     $"- Confidence: {aiResponse.OverallConfidence * 100:F0}%\n" +
+                                     $"- Processing Time: {aiResponse.ProcessingTimeMs}ms\n" +
+                                     $"- Historical Data Points: {insights.GetValueOrDefault("HistoricalDataPoints", 0)}\n" +
+                                     $"- Identified Patterns: {insights.GetValueOrDefault("IdentifiedPatterns", 0)}\n" +
+                                     $"- Model Accuracy: {(double)insights.GetValueOrDefault("ModelAccuracy", 0.85) * 100:F0}%\n\n" +
+                                     $"**🎯 AI-Optimized Time Slots:**\n" +
+                                     FormatAIPredictions(aiResponse.PredictedTimeSlots) + "\n\n" +
+                                     $"**🧠 AI Insights:**\n" +
+                                     $"- Prediction Strength: {insights.GetValueOrDefault("PredictionStrength", "Medium")}\n" +
+                                     $"- User Preference Alignment: {(double)insights.GetValueOrDefault("UserPreferenceAlignment", 0.7) * 100:F0}%\n" +
+                                     $"- Recommended Time: {insights.GetValueOrDefault("RecommendedTimeSlot", "Not available")}\n\n" +
+                                     $"**📈 Smart Recommendations:**\n" +
+                                     string.Join("\n", aiResponse.Recommendations.Select(r => $"• {r}")) + "\n\n" +
+                                     $"**🔬 This demo showcases:**\n" +
+                                     $"• Machine learning pattern recognition\n" +
+                                     $"• Historical data analysis\n" +
+                                     $"• Predictive scheduling optimization\n" +
+                                     $"• User preference learning\n" +
+                                     $"• Dynamic calendar adaptation\n\n" +
+                                     $"*Try 'smart schedule' for production-ready AI scheduling!*";
+
+                    await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
+                }
+                else
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text($"❌ AI Demo failed: {aiResponse.Message}"), 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text($"❌ Error in AI demo: {ex.Message}"), 
+                    cancellationToken);
+            }
+        }
+
+        private async Task HandleInsightsRequestAsync(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+
+            try
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("📊 **Analyzing your scheduling patterns and preferences...**"), 
+                    cancellationToken);
+
+                var insights = await _aiSchedulingService.GetAIInsightsAsync(userId);
+                var userPreferences = await _aiSchedulingService.GetUserPreferencesAsync(userId);
+                var patterns = await _aiSchedulingService.AnalyzeSchedulingPatternsAsync(userId);
+
+                var responseText = $"📈 **Your AI Scheduling Insights**\n\n" +
+                                 $"**🎯 Personal Preferences:**\n" +
+                                 $"- Total Scheduled Meetings: {userPreferences?.TotalScheduledMeetings ?? 0}\n" +
+                                 $"- Average Rescheduling Rate: {(userPreferences?.AverageReschedulingRate ?? 0.3) * 100:F0}%\n" +
+                                 $"- Preferred Duration: {userPreferences?.PreferredDurationMinutes ?? 60} minutes\n" +
+                                 $"- Optimal Time Window: {userPreferences?.OptimalStartTime:hh\\:mm} - {userPreferences?.OptimalEndTime:hh\\:mm}\n\n" +
+                                 $"**📊 Historical Analysis:**\n" +
+                                 $"- Data Points Analyzed: {insights.GetValueOrDefault("HistoricalDataPoints", 0)}\n" +
+                                 $"- Identified Patterns: {insights.GetValueOrDefault("IdentifiedPatterns", 0)}\n" +
+                                 $"- Success Rate: {(double)insights.GetValueOrDefault("HistoricalSuccessIndicator", 0.7) * 100:F0}%\n\n" +
+                                 $"**🎯 Optimal Meeting Times:**\n" +
+                                 FormatOptimalTimes(insights.GetValueOrDefault("OptimalTimeSlots", new List<string>())) + "\n\n" +
+                                 $"**🧠 AI Recommendations:**\n" +
+                                 FormatInsightRecommendations(insights.GetValueOrDefault("Recommendations", new List<string>())) + "\n\n" +
+                                 $"**🔮 Predictive Insights:**\n" +
+                                 $"- Model Accuracy: {(double)insights.GetValueOrDefault("ModelAccuracy", 0.85) * 100:F0}%\n" +
+                                 $"- Learning Progress: {(patterns.Count > 5 ? "Advanced" : patterns.Count > 2 ? "Intermediate" : "Basic")}\n\n" +
+                                 $"*The AI learns from your scheduling behavior to provide increasingly accurate recommendations.*";
+
+                await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text($"❌ Error getting insights: {ex.Message}"), 
+                    cancellationToken);
+            }
+        }
+
+        private AISchedulingRequest? ParseSmartSchedulingRequest(string input, string userId)
+        {
+            try
+            {
+                var parts = input.Split('|');
+                if (parts.Length < 2) return null;
+
+                var attendeeEmails = parts[0].Split(',')
+                    .Select(email => email.Trim())
+                    .Where(email => email.Contains("@"))
+                    .ToList();
+
+                if (attendeeEmails.Count == 0) return null;
+
+                var request = new AISchedulingRequest
+                {
+                    UserId = userId,
+                    AttendeeEmails = attendeeEmails,
+                    StartDate = DateTime.Now.AddHours(1),
+                    EndDate = DateTime.Now.AddDays(14),
+                    DurationMinutes = 60,
+                    UseLearningAlgorithm = true,
+                    UseHistoricalData = true,
+                    UseUserPreferences = true,
+                    UseAttendeePatterns = true,
+                    OptimizeForProductivity = true
+                };
+
+                // Parse additional parameters
+                foreach (var part in parts.Skip(1))
+                {
+                    var trimmed = part.Trim().ToLower();
+                    if (trimmed.StartsWith("duration:"))
+                    {
+                        if (int.TryParse(trimmed.Substring(9), out int duration))
+                            request.DurationMinutes = duration;
+                    }
+                    else if (trimmed.StartsWith("days:"))
+                    {
+                        if (int.TryParse(trimmed.Substring(5), out int days))
+                            request.EndDate = DateTime.Now.AddDays(days);
+                    }
+                }
+
+                return request;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private string FormatAIPredictions(List<TimeSlotPrediction> predictions)
+        {
+            var result = new StringBuilder();
+            for (int i = 0; i < predictions.Count; i++)
+            {
+                var prediction = predictions[i];
+                result.AppendLine($"**{i + 1}.** {prediction.StartTime:dddd, MMM dd - HH:mm} - {prediction.EndTime:HH:mm}");
+                result.AppendLine($"   • Confidence: {prediction.OverallConfidence * 100:F0}%");
+                result.AppendLine($"   • Success Rate: {prediction.PredictedSuccessRate * 100:F0}%");
+                result.AppendLine($"   • Reason: {prediction.PredictionReason}");
+                if (prediction.IsOptimalSlot)
+                    result.AppendLine($"   • ⭐ **Optimal Slot**");
+                result.AppendLine();
+            }
+            return result.ToString();
+        }
+
+        private string FormatOptimalTimes(object optimalTimes)
+        {
+            if (optimalTimes is List<string> timeList && timeList.Count > 0)
+            {
+                return string.Join("\n", timeList.Select(t => $"• {t}"));
+            }
+            return "• No specific patterns identified yet";
+        }
+
+        private string FormatInsightRecommendations(object recommendations)
+        {
+            if (recommendations is List<string> recList && recList.Count > 0)
+            {
+                return string.Join("\n", recList.Select(r => $"• {r}"));
+            }
+            return "• Continue using the AI scheduler to build more insights";
+        }
+
         private async Task HandleHelpCommandAsync(
             ITurnContext<IMessageActivity> turnContext,
             CancellationToken cancellationToken)
@@ -660,11 +938,17 @@ namespace InterviewSchedulingBot.Bots
             var userId = turnContext.Activity.From.Id;
             var isAuthenticated = await _authService.IsUserAuthenticatedAsync(userId);
 
-            var helpText = "**Interview Scheduling Bot Commands:**\n\n" +
+            var helpText = "**Interview Scheduling Bot - AI-Powered Commands:**\n\n" +
+                          "🤖 **AI-Driven Scheduling:**\n" +
+                          "• **smart schedule** - Advanced AI scheduling with learning capabilities\n" +
+                          "• **ai demo** - Demonstrate AI scheduling with detailed insights\n" +
+                          "• **insights** - View your personal scheduling patterns and AI analysis\n" +
+                          "• **find optimal** - Use Microsoft Graph AI for optimal time finding\n\n" +
+                          "📅 **Standard Scheduling:**\n" +
                           "• **schedule** or **interview** - Learn about scheduling options\n" +
-                          "• **ai schedule** or **find optimal** - Use AI-driven intelligent scheduling ✨\n" +
-                          "• **find slots** - Find available time slots (basic scheduling)\n" +
-                          "• **book [number]** - Book a meeting from the suggestions (e.g., 'book 1')\n" +
+                          "• **find slots** - Find available time slots (basic scheduling)\n\n" +
+                          "🔧 **General Commands:**\n" +
+                          "• **book [number]** - Book a meeting from suggestions (e.g., 'book 1')\n" +
                           "• **help** - Show this help message\n";
 
             if (isAuthenticated)

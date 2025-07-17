@@ -28,6 +28,11 @@ builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
 // Register the Core Scheduling Logic
 builder.Services.AddSingleton<ICoreSchedulingLogic, CoreSchedulingLogic>();
 
+// Register the AI Scheduling Services
+builder.Services.AddSingleton<ISchedulingHistoryRepository, InMemorySchedulingHistoryRepository>();
+builder.Services.AddSingleton<ISchedulingMLModel, SchedulingMLModel>();
+builder.Services.AddSingleton<IAISchedulingService, AISchedulingService>();
+
 // Register the Scheduling Service
 builder.Services.AddSingleton<ISchedulingService, SchedulingService>();
 
@@ -58,6 +63,23 @@ if (!configValidator.ValidateAuthenticationConfiguration())
 {
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
     logger.LogWarning("Authentication configuration is incomplete. The bot will start but authentication features may not work properly.");
+}
+
+// Run AI scheduling test in development environment
+if (app.Environment.IsDevelopment())
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("Running AI Scheduling functionality test...");
+    
+    try
+    {
+        await InterviewSchedulingBot.Tests.AISchedulingTest.RunAISchedulingTest();
+        logger.LogInformation("✓ AI Scheduling test completed successfully");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "AI Scheduling test failed");
+    }
 }
 
 // Configure the HTTP request pipeline.
