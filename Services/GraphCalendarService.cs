@@ -330,6 +330,12 @@ namespace InterviewSchedulingBot.Services
             {
                 var graphClient = await GetUserGraphServiceClientAsync(userId);
 
+                if (suggestion.MeetingTimeSlot?.Start?.DateTime == null || 
+                    suggestion.MeetingTimeSlot?.End?.DateTime == null)
+                {
+                    throw new ArgumentException("Invalid meeting time data in suggestion");
+                }
+
                 var startTime = DateTime.Parse(suggestion.MeetingTimeSlot.Start.DateTime);
                 var endTime = DateTime.Parse(suggestion.MeetingTimeSlot.End.DateTime);
 
@@ -348,12 +354,12 @@ namespace InterviewSchedulingBot.Services
                     Start = new DateTimeTimeZone
                     {
                         DateTime = startTime.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),
-                        TimeZone = suggestion.MeetingTimeSlot.Start.TimeZone
+                        TimeZone = suggestion.MeetingTimeSlot.Start.TimeZone ?? "UTC"
                     },
                     End = new DateTimeTimeZone
                     {
                         DateTime = endTime.ToString("yyyy-MM-ddTHH:mm:ss.fffK"),
-                        TimeZone = suggestion.MeetingTimeSlot.End.TimeZone
+                        TimeZone = suggestion.MeetingTimeSlot.End.TimeZone ?? "UTC"
                     },
                     Attendees = attendeeEmails.Select(email => new Attendee
                     {

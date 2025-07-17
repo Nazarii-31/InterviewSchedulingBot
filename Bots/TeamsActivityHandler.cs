@@ -439,6 +439,15 @@ namespace InterviewSchedulingBot.Bots
 
                 if (bookingResponse.IsSuccess)
                 {
+                    if (selectedSuggestion.MeetingTimeSlot?.Start?.DateTime == null || 
+                        selectedSuggestion.MeetingTimeSlot?.End?.DateTime == null)
+                    {
+                        await turnContext.SendActivityAsync(
+                            MessageFactory.Text("❌ Invalid meeting time data in selected suggestion."), 
+                            cancellationToken);
+                        return;
+                    }
+
                     var startTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.Start.DateTime);
                     var endTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.End.DateTime);
 

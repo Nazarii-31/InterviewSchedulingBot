@@ -22,6 +22,10 @@ namespace InterviewSchedulingBot.Models
 
                 var suggestions = MeetingTimeSuggestions.Take(10).Select((suggestion, index) => 
                 {
+                    if (suggestion.MeetingTimeSlot?.Start?.DateTime == null || 
+                        suggestion.MeetingTimeSlot?.End?.DateTime == null)
+                        return $"{index + 1}. Invalid meeting time data";
+                        
                     var startTime = DateTime.Parse(suggestion.MeetingTimeSlot.Start.DateTime);
                     var endTime = DateTime.Parse(suggestion.MeetingTimeSlot.End.DateTime);
                     var confidence = suggestion.Confidence > 0 ? 
@@ -43,6 +47,10 @@ namespace InterviewSchedulingBot.Models
 
                 var suggestions = MeetingTimeSuggestions.Take(10).Select((suggestion, index) => 
                 {
+                    if (suggestion.MeetingTimeSlot?.Start?.DateTime == null || 
+                        suggestion.MeetingTimeSlot?.End?.DateTime == null)
+                        return $"**Option {index + 1}**: Invalid meeting time data";
+                        
                     var startTime = DateTime.Parse(suggestion.MeetingTimeSlot.Start.DateTime);
                     var endTime = DateTime.Parse(suggestion.MeetingTimeSlot.End.DateTime);
                     var confidence = suggestion.Confidence > 0 ? 
