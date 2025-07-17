@@ -21,3 +21,6 @@ node_modules/
 *.log
 appsettings.Development.json
 .env
+
+# Teams app package
+*.zip

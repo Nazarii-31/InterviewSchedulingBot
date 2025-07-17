@@ -33,6 +33,27 @@ The bot now supports user authentication, allowing it to act on behalf of the au
 - Azure subscription with bot and app registrations
 - Microsoft Teams environment for testing
 
+### Microsoft Teams Deployment
+
+This bot includes a complete Microsoft Teams app manifest for easy deployment:
+
+1. **Quick Start**: Use the provided script to create a Teams app package:
+   ```bash
+   ./create-teams-package.sh
+   ```
+
+2. **Manual Setup**: 
+   - Update `manifest.json` with your Microsoft App ID
+   - Create a zip file with `manifest.json`, `icon-outline.png`, and `icon-color.png`
+   - Upload to Microsoft Teams Developer Portal
+
+3. **Detailed Instructions**: See [TEAMS_DEPLOYMENT.md](TEAMS_DEPLOYMENT.md) for complete deployment steps
+
+The bot supports all Teams contexts:
+- **Personal conversations**: 1:1 chat with the bot
+- **Team channels**: Add the bot to team channels
+- **Group chats**: Bot can participate in group conversations
+
 ### Configuration
 
 1. **Azure App Registration**: Create an Azure AD app registration with appropriate permissions
