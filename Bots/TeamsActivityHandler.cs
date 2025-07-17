@@ -33,6 +33,7 @@ namespace InterviewSchedulingBot.Bots
             IAuthenticationService authService, 
             ISchedulingService schedulingService,
             IGraphSchedulingService graphSchedulingService,
+            IAISchedulingService aiSchedulingService,
             IConfiguration configuration,
             ConversationState conversationState,
             UserState userState)
