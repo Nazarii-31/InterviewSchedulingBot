@@ -15,13 +15,20 @@ namespace InterviewSchedulingBot.Bots
         private readonly IGraphCalendarService _calendarService;
         private readonly IAuthenticationService _authService;
         private readonly ISchedulingService _schedulingService;
+        private readonly IGraphSchedulingService _graphSchedulingService;
         private readonly IConfiguration _configuration;
 
-        public InterviewBot(IGraphCalendarService calendarService, IAuthenticationService authService, ISchedulingService schedulingService, IConfiguration configuration)
+        public InterviewBot(
+            IGraphCalendarService calendarService, 
+            IAuthenticationService authService, 
+            ISchedulingService schedulingService,
+            IGraphSchedulingService graphSchedulingService,
+            IConfiguration configuration)
         {
             _calendarService = calendarService;
             _authService = authService;
             _schedulingService = schedulingService;
+            _graphSchedulingService = graphSchedulingService;
             _configuration = configuration;
         }
 
@@ -70,9 +77,17 @@ namespace InterviewSchedulingBot.Bots
             {
                 await HandleScheduleRequestAsync(turnContext, cancellationToken);
             }
+            else if (userMessage.ToLower().Contains("ai") && userMessage.ToLower().Contains("schedule"))
+            {
+                await HandleAIScheduleRequestAsync(turnContext, cancellationToken);
+            }
             else if (userMessage.ToLower().Contains("find") && userMessage.ToLower().Contains("slots"))
             {
                 await HandleFindSlotsRequestAsync(turnContext, cancellationToken);
+            }
+            else if (userMessage.ToLower().Contains("find") && userMessage.ToLower().Contains("optimal"))
+            {
+                await HandleFindOptimalTimesRequestAsync(turnContext, cancellationToken);
             }
             else if (userMessage.ToLower().Contains("help"))
             {
@@ -147,16 +162,266 @@ namespace InterviewSchedulingBot.Bots
             }
 
             var response = "Great! You're authenticated and ready to schedule interviews.\n\n" +
-                          "I can help you in two ways:\n" +
-                          "1. **Find available slots** - Type 'find slots' and I'll help you find common availability for multiple attendees\n" +
-                          "2. **Create interview directly** - Provide interview details and I'll create the calendar event\n\n" +
-                          "For finding slots, I'll need:\n" +
+                          "I offer two scheduling approaches:\n\n" +
+                          "🤖 **AI-Driven Scheduling** (Recommended)\n" +
+                          "- Type 'ai schedule' or 'find optimal' to use Microsoft Graph's intelligent scheduling\n" +
+                          "- Uses advanced algorithms to find the best meeting times\n" +
+                          "- Considers attendee availability, preferences, and working hours\n\n" +
+                          "📅 **Basic Scheduling**\n" +
+                          "- Type 'find slots' for basic availability checking\n" +
+                          "- Simple slot finding based on calendar conflicts\n\n" +
+                          "For AI scheduling, I'll need:\n" +
                           "- Attendee email addresses\n" +
-                          "- Interview duration\n" +
+                          "- Meeting duration (in minutes)\n" +
                           "- Date range to search\n\n" +
-                          "Type 'find slots' to start the scheduling assistant!";
+                          "Try typing 'find optimal' to experience the AI-driven scheduling!";
 
             await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+        }
+
+        private async Task HandleAIScheduleRequestAsync(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+            var accessToken = await _authService.GetAccessTokenAsync(userId);
+
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                await HandleAuthenticationAsync(turnContext, cancellationToken);
+                return;
+            }
+
+            var response = "🤖 **AI-Driven Interview Scheduling**\n\n" +
+                          "I'll use Microsoft Graph's intelligent scheduling to find optimal meeting times.\n\n" +
+                          "**How to use:**\n" +
+                          "Provide attendee emails and preferences in this format:\n" +
+                          "`attendee1@company.com, attendee2@company.com | duration:60 | days:7`\n\n" +
+                          "**Example:**\n" +
+                          "`john@company.com, jane@company.com | duration:90 | days:14`\n\n" +
+                          "**Parameters:**\n" +
+                          "- **Attendees:** Comma-separated email addresses\n" +
+                          "- **Duration:** Meeting duration in minutes (default: 60)\n" +
+                          "- **Days:** Number of days to search ahead (default: 14)\n\n" +
+                          "Or type `optimal demo` to see a demonstration.\n\n" +
+                          "✨ **AI Features:**\n" +
+                          "- Smart conflict detection\n" +
+                          "- Respects working hours and time zones\n" +
+                          "- Confidence scoring for suggestions\n" +
+                          "- Optimized for productivity";
+
+            await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+        }
+
+        private async Task HandleFindOptimalTimesRequestAsync(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+            var accessToken = await _authService.GetAccessTokenAsync(userId);
+
+            if (string.IsNullOrEmpty(accessToken))
+            {
+                await HandleAuthenticationAsync(turnContext, cancellationToken);
+                return;
+            }
+
+            var userMessage = turnContext.Activity.Text?.ToLower() ?? "";
+            
+            if (userMessage.Contains("demo") || userMessage.Contains("example"))
+            {
+                await HandleOptimalTimesDemo(turnContext, cancellationToken);
+                return;
+            }
+
+            // Check if the user provided scheduling parameters
+            if (userMessage.Contains("@") && userMessage.Contains("|"))
+            {
+                await ProcessOptimalTimesRequest(turnContext, cancellationToken);
+                return;
+            }
+
+            // Show instructions
+            await HandleAIScheduleRequestAsync(turnContext, cancellationToken);
+        }
+
+        private async Task HandleOptimalTimesDemo(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+
+            try
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("🔍 **AI-Driven Scheduling Demo**\n\nSearching for optimal meeting times using Microsoft Graph AI... This may take a moment."), 
+                    cancellationToken);
+
+                // Create a sample GraphSchedulingRequest
+                var defaultDuration = _configuration.GetValue<int>("Scheduling:DefaultDurationMinutes", 60);
+                var searchDays = _configuration.GetValue<int>("Scheduling:SearchDays", 14);
+
+                var graphSchedulingRequest = new GraphSchedulingRequest
+                {
+                    AttendeeEmails = new List<string> { "demo@example.com", "test@example.com" },
+                    StartDate = DateTime.Now.AddHours(1), // Start from next hour
+                    EndDate = DateTime.Now.AddDays(searchDays),
+                    DurationMinutes = defaultDuration,
+                    WorkingHoursStart = TimeSpan.Parse(_configuration["Scheduling:WorkingHours:StartTime"] ?? "09:00"),
+                    WorkingHoursEnd = TimeSpan.Parse(_configuration["Scheduling:WorkingHours:EndTime"] ?? "17:00"),
+                    MaxSuggestions = 5
+                };
+
+                // Convert working days from config
+                var workingDaysConfig = _configuration.GetSection("Scheduling:WorkingHours:WorkingDays").Get<string[]>();
+                if (workingDaysConfig != null)
+                {
+                    graphSchedulingRequest.WorkingDays = workingDaysConfig
+                        .Select(day => Enum.Parse<DayOfWeek>(day))
+                        .ToList();
+                }
+
+                var graphSchedulingResponse = await _graphSchedulingService.FindOptimalMeetingTimesAsync(graphSchedulingRequest, userId);
+
+                if (graphSchedulingResponse.IsSuccess && graphSchedulingResponse.HasSuggestions)
+                {
+                    var responseText = $"✅ **AI Found {graphSchedulingResponse.MeetingTimeSuggestions.Count} Optimal Meeting Times!**\n\n" +
+                                     $"**Search Criteria:**\n" +
+                                     $"- Duration: {graphSchedulingRequest.DurationMinutes} minutes\n" +
+                                     $"- Attendees: {string.Join(", ", graphSchedulingRequest.AttendeeEmails)}\n" +
+                                     $"- Date Range: {graphSchedulingRequest.StartDate:yyyy-MM-dd} to {graphSchedulingRequest.EndDate:yyyy-MM-dd}\n\n" +
+                                     $"**🤖 AI-Suggested Optimal Times:**\n{graphSchedulingResponse.FormattedSuggestionsText}\n\n" +
+                                     $"💡 **AI Advantages:**\n" +
+                                     $"- Intelligent conflict detection\n" +
+                                     $"- Optimized for productivity\n" +
+                                     $"- Considers working hours and preferences\n" +
+                                     $"- Confidence scoring for each suggestion\n\n" +
+                                     $"*This was a demonstration. In production, I would analyze real calendar data using Microsoft Graph's advanced scheduling algorithms.*";
+
+                    await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
+                }
+                else
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text($"❌ AI Scheduling failed: {graphSchedulingResponse.Message}"), 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text($"❌ Error during AI scheduling: {ex.Message}"), 
+                    cancellationToken);
+            }
+        }
+
+        private async Task ProcessOptimalTimesRequest(
+            ITurnContext<IMessageActivity> turnContext,
+            CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+            var userMessage = turnContext.Activity.Text ?? "";
+
+            try
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("🔍 **Processing your AI scheduling request...**"), 
+                    cancellationToken);
+
+                // Parse the user input
+                var request = ParseSchedulingRequest(userMessage);
+
+                if (request == null)
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text("❌ Invalid format. Please use: `email1@company.com, email2@company.com | duration:60 | days:7`"), 
+                        cancellationToken);
+                    return;
+                }
+
+                var graphSchedulingResponse = await _graphSchedulingService.FindOptimalMeetingTimesAsync(request, userId);
+
+                if (graphSchedulingResponse.IsSuccess && graphSchedulingResponse.HasSuggestions)
+                {
+                    var responseText = $"✅ **AI Found {graphSchedulingResponse.MeetingTimeSuggestions.Count} Optimal Meeting Times!**\n\n" +
+                                     $"**🤖 AI-Suggested Times:**\n{graphSchedulingResponse.FormattedSuggestionsText}\n\n" +
+                                     $"💡 These suggestions are optimized by Microsoft Graph's AI algorithms for maximum productivity and minimal conflicts.";
+
+                    await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
+                }
+                else
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text($"❌ AI Scheduling result: {graphSchedulingResponse.Message}"), 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text($"❌ Error processing AI scheduling request: {ex.Message}"), 
+                    cancellationToken);
+            }
+        }
+
+        private GraphSchedulingRequest? ParseSchedulingRequest(string input)
+        {
+            try
+            {
+                var parts = input.Split('|');
+                if (parts.Length < 1) return null;
+
+                var attendeePart = parts[0].Trim();
+                var attendeeEmails = attendeePart.Split(',').Select(e => e.Trim()).Where(e => e.Contains("@")).ToList();
+
+                if (attendeeEmails.Count == 0) return null;
+
+                var request = new GraphSchedulingRequest
+                {
+                    AttendeeEmails = attendeeEmails,
+                    StartDate = DateTime.Now.AddHours(1),
+                    EndDate = DateTime.Now.AddDays(14),
+                    DurationMinutes = 60,
+                    WorkingHoursStart = TimeSpan.Parse(_configuration["Scheduling:WorkingHours:StartTime"] ?? "09:00"),
+                    WorkingHoursEnd = TimeSpan.Parse(_configuration["Scheduling:WorkingHours:EndTime"] ?? "17:00"),
+                    MaxSuggestions = 10
+                };
+
+                // Parse additional parameters
+                for (int i = 1; i < parts.Length; i++)
+                {
+                    var param = parts[i].Trim();
+                    if (param.StartsWith("duration:"))
+                    {
+                        if (int.TryParse(param.Substring(9), out int duration))
+                        {
+                            request.DurationMinutes = duration;
+                        }
+                    }
+                    else if (param.StartsWith("days:"))
+                    {
+                        if (int.TryParse(param.Substring(5), out int days))
+                        {
+                            request.EndDate = DateTime.Now.AddDays(days);
+                        }
+                    }
+                }
+
+                // Convert working days from config
+                var workingDaysConfig = _configuration.GetSection("Scheduling:WorkingHours:WorkingDays").Get<string[]>();
+                if (workingDaysConfig != null)
+                {
+                    request.WorkingDays = workingDaysConfig
+                        .Select(day => Enum.Parse<DayOfWeek>(day))
+                        .ToList();
+                }
+
+                return request;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private async Task HandleFindSlotsRequestAsync(
@@ -270,25 +535,33 @@ namespace InterviewSchedulingBot.Bots
 
             var helpText = "**Interview Scheduling Bot Commands:**\n\n" +
                           "• **schedule** or **interview** - Learn about scheduling options\n" +
-                          "• **find slots** - Find available time slots for multiple attendees\n" +
+                          "• **ai schedule** or **find optimal** - Use AI-driven intelligent scheduling ✨\n" +
+                          "• **find slots** - Find available time slots (basic scheduling)\n" +
                           "• **help** - Show this help message\n";
 
             if (isAuthenticated)
             {
                 helpText += "• **logout** or **signout** - Sign out from your account\n\n" +
-                           "✅ You are currently signed in and can access calendar features.\n\n" +
-                           "**Scheduling Features:**\n" +
+                           "✅ You are currently signed in and can access all features.\n\n" +
+                           "**🤖 AI-Driven Scheduling Features:**\n" +
+                           "- Uses Microsoft Graph's intelligent algorithms\n" +
+                           "- Finds optimal meeting times based on attendee preferences\n" +
+                           "- Smart conflict detection and resolution\n" +
+                           "- Confidence scoring for each suggestion\n" +
+                           "- Respects working hours and time zones\n\n" +
+                           "**📅 Basic Scheduling Features:**\n" +
                            "- Find common availability across multiple calendars\n" +
-                           "- Respect business hours and working days\n" +
                            "- Create Teams meetings with calendar integration\n" +
-                           "- Smart conflict detection and resolution";
+                           "- Basic conflict detection\n\n" +
+                           "**🚀 Quick Start:**\n" +
+                           "1. Type 'find optimal' for AI-driven scheduling\n" +
+                           "2. Type 'optimal demo' to see AI scheduling in action\n" +
+                           "3. Type 'find slots' then 'example demo' for basic scheduling";
             }
             else
             {
                 helpText += "\n❌ You need to sign in first to use calendar features.";
             }
-
-            helpText += "\n\n💡 **Quick Start:** Type 'find slots' and then 'example demo' to see the scheduling assistant in action!";
 
             await turnContext.SendActivityAsync(MessageFactory.Text(helpText), cancellationToken);
         }
