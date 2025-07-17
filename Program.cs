@@ -25,6 +25,9 @@ builder.Services.AddSingleton<IAuthenticationService, AuthenticationService>();
 // Register the Graph Calendar Service
 builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
 
+// Register the Core Scheduling Logic
+builder.Services.AddSingleton<ICoreSchedulingLogic, CoreSchedulingLogic>();
+
 // Register the Scheduling Service
 builder.Services.AddSingleton<ISchedulingService, SchedulingService>();
 
