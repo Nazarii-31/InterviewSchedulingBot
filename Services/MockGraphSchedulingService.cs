@@ -79,10 +79,17 @@ namespace InterviewSchedulingBot.Services
                         request);
                 }
 
-                // Generate a fake event ID
-                var fakeEventId = $"mock-event-{Guid.NewGuid().ToString().Substring(0, 8)}";
+                // Simulate the booking process more realistically
+                _logger.LogInformation("MockGraphSchedulingService: Simulating calendar event creation");
+                _logger.LogInformation("MockGraphSchedulingService: Adding attendees: {Attendees}", string.Join(", ", request.AttendeeEmails));
+                _logger.LogInformation("MockGraphSchedulingService: Setting up Teams meeting");
+                _logger.LogInformation("MockGraphSchedulingService: Sending calendar invitations");
+
+                // Generate a fake event ID that looks realistic
+                var fakeEventId = $"AAMkADUwNjQ4ZjE3LTkzYzYtNDNjZi1iZGY5LTc1MmM5NzQxMzAzNgBGAAAAAACx{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
 
                 _logger.LogInformation("MockGraphSchedulingService: Generated fake event ID {EventId}", fakeEventId);
+                _logger.LogInformation("MockGraphSchedulingService: Mock booking completed successfully");
 
                 return BookingResponse.CreateSuccess(fakeEventId, request);
             }

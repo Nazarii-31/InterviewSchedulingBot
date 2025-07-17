@@ -345,11 +345,12 @@ namespace InterviewSchedulingBot.Services
                     Body = new ItemBody
                     {
                         ContentType = BodyType.Html,
-                        Content = $"<p>Meeting scheduled via AI-driven scheduling</p>" +
-                                 $"<p>Attendees: {string.Join(", ", attendeeEmails)}</p>" +
-                                 $"<p>Duration: {(endTime - startTime).TotalMinutes} minutes</p>" +
-                                 $"<p>Confidence: {suggestion.Confidence * 100:F0}%</p>" +
-                                 $"<p>Suggestion Reason: {suggestion.SuggestionReason}</p>"
+                        Content = $"<p><strong>Meeting scheduled via AI-driven scheduling</strong></p>" +
+                                 $"<p><strong>Attendees:</strong> {string.Join(", ", attendeeEmails)}</p>" +
+                                 $"<p><strong>Duration:</strong> {(endTime - startTime).TotalMinutes} minutes</p>" +
+                                 $"<p><strong>AI Confidence:</strong> {suggestion.Confidence * 100:F0}%</p>" +
+                                 $"<p><strong>Scheduling Reason:</strong> {suggestion.SuggestionReason}</p>" +
+                                 $"<p><em>This meeting was automatically scheduled using Microsoft Graph AI-driven scheduling algorithms.</em></p>"
                     },
                     Start = new DateTimeTimeZone
                     {
@@ -371,16 +372,29 @@ namespace InterviewSchedulingBot.Services
                         Type = AttendeeType.Required
                     }).ToList(),
                     IsOnlineMeeting = true,
-                    OnlineMeetingProvider = OnlineMeetingProviderType.TeamsForBusiness
+                    OnlineMeetingProvider = OnlineMeetingProviderType.TeamsForBusiness,
+                    // Explicitly request that invitations be sent
+                    ResponseRequested = true
                 };
 
                 // Create the event in the user's calendar (delegated permission)
+                // Microsoft Graph automatically sends invitations when creating calendar events with attendees
                 var createdEvent = await graphClient.Me
                     .Calendar
                     .Events
                     .PostAsync(newEvent);
 
-                return createdEvent?.Id ?? "Event created but ID not available";
+                if (createdEvent?.Id == null)
+                {
+                    throw new InvalidOperationException("Event was created but no ID was returned");
+                }
+
+                // Log successful booking for debugging
+                System.Diagnostics.Debug.WriteLine($"Successfully booked meeting: {createdEvent.Id}");
+                System.Diagnostics.Debug.WriteLine($"Meeting: {meetingTitle} at {startTime:yyyy-MM-dd HH:mm} - {endTime:HH:mm}");
+                System.Diagnostics.Debug.WriteLine($"Attendees: {string.Join(", ", attendeeEmails)}");
+
+                return createdEvent.Id;
             }
             catch (Exception ex)
             {
