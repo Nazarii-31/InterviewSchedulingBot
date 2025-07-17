@@ -10,8 +10,9 @@ namespace InterviewSchedulingBot.Services
     public class AuthenticationService : IAuthenticationService
     {
         private readonly IConfiguration _configuration;
-        private readonly IConfidentialClientApplication _msalClient;
+        private readonly IConfidentialClientApplication? _msalClient;
         private readonly ConcurrentDictionary<string, UserTokenInfo> _tokenStorage;
+        private readonly bool _isConfigured;
 
         public AuthenticationService(IConfiguration configuration)
         {
@@ -22,21 +23,26 @@ namespace InterviewSchedulingBot.Services
             var clientSecret = _configuration["Authentication:ClientSecret"];
             var authority = _configuration["Authentication:Authority"]?.Replace("{tenant}", _configuration["Authentication:TenantId"]);
 
-            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret) || string.IsNullOrEmpty(authority))
-            {
-                throw new InvalidOperationException("Authentication configuration is missing. Please check appsettings.json");
-            }
+            // Check if authentication is configured
+            _isConfigured = !string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret) && !string.IsNullOrEmpty(authority);
 
-            _msalClient = ConfidentialClientApplicationBuilder
-                .Create(clientId)
-                .WithClientSecret(clientSecret)
-                .WithAuthority(authority)
-                .Build();
+            if (_isConfigured)
+            {
+                _msalClient = ConfidentialClientApplicationBuilder
+                    .Create(clientId)
+                    .WithClientSecret(clientSecret)
+                    .WithAuthority(authority)
+                    .Build();
+            }
+            else
+            {
+                _msalClient = null;
+            }
         }
 
         public async Task<string?> GetAccessTokenAsync(string userId)
         {
-            if (string.IsNullOrEmpty(userId))
+            if (string.IsNullOrEmpty(userId) || !_isConfigured || _msalClient == null)
             {
                 return null;
             }
@@ -128,22 +134,25 @@ namespace InterviewSchedulingBot.Services
 
             _tokenStorage.TryRemove(userId, out _);
             
-            // Also remove from MSAL cache
-            try
+            // Also remove from MSAL cache if authentication is configured
+            if (_isConfigured && _msalClient != null)
             {
-                // Using GetAccountsAsync is deprecated but still functional for cache cleanup
-                // In production, consider implementing proper account identifier tracking
-                var accounts = await _msalClient.GetAccountsAsync();
-                var account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier.Contains(userId));
-                if (account != null)
+                try
                 {
-                    await _msalClient.RemoveAsync(account);
+                    // Using GetAccountsAsync is deprecated but still functional for cache cleanup
+                    // In production, consider implementing proper account identifier tracking
+                    var accounts = await _msalClient.GetAccountsAsync();
+                    var account = accounts.FirstOrDefault(a => a.HomeAccountId.Identifier.Contains(userId));
+                    if (account != null)
+                    {
+                        await _msalClient.RemoveAsync(account);
+                    }
                 }
-            }
-            catch (MsalException ex)
-            {
-                // Ignore errors when clearing cache but log for debugging
-                System.Diagnostics.Debug.WriteLine($"Failed to clear MSAL cache for user {userId}: {ex.Message}");
+                catch (MsalException ex)
+                {
+                    // Ignore errors when clearing cache but log for debugging
+                    System.Diagnostics.Debug.WriteLine($"Failed to clear MSAL cache for user {userId}: {ex.Message}");
+                }
             }
         }
 
@@ -152,6 +161,11 @@ namespace InterviewSchedulingBot.Services
             if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(conversationId))
             {
                 throw new ArgumentException("UserId and ConversationId cannot be null or empty");
+            }
+
+            if (!_isConfigured || _msalClient == null)
+            {
+                throw new InvalidOperationException("Authentication is not configured. Please check appsettings.json");
             }
 
             try
