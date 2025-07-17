@@ -34,10 +34,12 @@ var useMockGraphService = builder.Configuration.GetValue<bool>("GraphScheduling:
 if (useMockGraphService)
 {
     builder.Services.AddSingleton<IGraphSchedulingService, MockGraphSchedulingService>();
+    Console.WriteLine("✓ Using MockGraphSchedulingService for development (no Azure credentials required)");
 }
 else
 {
     builder.Services.AddSingleton<IGraphSchedulingService, GraphSchedulingService>();
+    Console.WriteLine("✓ Using GraphSchedulingService (requires Azure credentials)");
 }
 
 // Create the bot as a transient. In this case the ASP Controller is expecting an IBot.

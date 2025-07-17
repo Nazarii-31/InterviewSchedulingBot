@@ -53,9 +53,28 @@ The bot now supports user authentication, allowing it to act on behalf of the au
     "ClientId": "your-graph-app-client-id",
     "ClientSecret": "your-graph-app-client-secret",
     "TenantId": "your-azure-tenant-id"
+  },
+  "GraphScheduling": {
+    "UseMockService": false
   }
 }
 ```
+
+### Mock Service for Development
+
+When Azure credentials are not available, you can use the mock Graph API service for development and testing:
+
+1. **Enable Mock Service**: Set `"GraphScheduling:UseMockService": true` in `appsettings.json`
+2. **Development Mode**: The bot will use predefined fake meeting time suggestions
+3. **Testing**: Perfect for testing the conversational flow without live credentials
+4. **Easy Switch**: Change the flag to `false` to use the real Microsoft Graph API
+
+**Mock Service Features:**
+- Returns realistic fake meeting time suggestions
+- Simulates confidence scoring and suggestion reasons
+- Respects working hours and day constraints
+- Generates fake event IDs for booking simulation
+- Maintains the same interface as the real service
 
 ### Required Permissions
 
