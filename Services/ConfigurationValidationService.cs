@@ -22,6 +22,15 @@ namespace InterviewSchedulingBot.Services
         /// <returns>True if configuration is valid, false otherwise</returns>
         public bool ValidateAuthenticationConfiguration()
         {
+            // Check if mock service is enabled
+            var useMockService = _configuration.GetValue<bool>("GraphScheduling:UseMockService", false);
+            
+            if (useMockService)
+            {
+                _logger.LogInformation("Using mock service - skipping authentication configuration validation");
+                return true;
+            }
+
             var isValid = true;
             var missingSettings = new List<string>();
 
@@ -128,7 +137,17 @@ namespace InterviewSchedulingBot.Services
         /// </summary>
         public void LogConfigurationState()
         {
+            var useMockService = _configuration.GetValue<bool>("GraphScheduling:UseMockService", false);
+            
             _logger.LogInformation("Current configuration state:");
+            _logger.LogInformation("  GraphScheduling:UseMockService: {UseMockService}", useMockService);
+            
+            if (useMockService)
+            {
+                _logger.LogInformation("  Mock service enabled - authentication credentials not required");
+                return;
+            }
+
             _logger.LogInformation("  MicrosoftAppId: {HasValue}", !string.IsNullOrEmpty(_configuration["MicrosoftAppId"]) ? "✓ Set" : "✗ Missing");
             _logger.LogInformation("  MicrosoftAppPassword: {HasValue}", !string.IsNullOrEmpty(_configuration["MicrosoftAppPassword"]) ? "✓ Set" : "✗ Missing");
             _logger.LogInformation("  MicrosoftAppTenantId: {HasValue}", !string.IsNullOrEmpty(_configuration["MicrosoftAppTenantId"]) ? "✓ Set" : "✗ Missing");
