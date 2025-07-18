@@ -37,8 +37,15 @@ builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
 // Register the Core Scheduling Logic
 builder.Services.AddSingleton<ICoreSchedulingLogic, CoreSchedulingLogic>();
 
-// Register the Scheduling Service
-builder.Services.AddSingleton<ISchedulingService, SchedulingService>();
+// Register the AI Scheduling Services (Hybrid Approach) - Unified Service
+builder.Services.AddSingleton<ISchedulingHistoryRepository, InMemorySchedulingHistoryRepository>();
+builder.Services.AddSingleton<ISchedulingMLModel, SchedulingMLModel>();
+var hybridSchedulingService = new ServiceDescriptor(typeof(HybridAISchedulingService), typeof(HybridAISchedulingService), ServiceLifetime.Singleton);
+builder.Services.Add(hybridSchedulingService);
+
+// Register the same instance for both interfaces (AI and Basic scheduling)
+builder.Services.AddSingleton<IAISchedulingService>(provider => provider.GetRequiredService<HybridAISchedulingService>());
+builder.Services.AddSingleton<ISchedulingService>(provider => provider.GetRequiredService<HybridAISchedulingService>());
 
 // Register the Graph Scheduling Service (AI-driven scheduling)
 // Use mock service if configured, otherwise use real service
@@ -67,6 +74,23 @@ if (!configValidator.ValidateAuthenticationConfiguration())
 {
     var logger = app.Services.GetRequiredService<ILogger<Program>>();
     logger.LogWarning("Authentication configuration is incomplete. The bot will start but authentication features may not work properly.");
+}
+
+// Run hybrid AI scheduling test in development environment
+if (app.Environment.IsDevelopment())
+{
+    var logger = app.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("Running Hybrid AI Scheduling functionality test...");
+    
+    try
+    {
+        await InterviewSchedulingBot.Tests.HybridAISchedulingTest.RunHybridAISchedulingTest();
+        logger.LogInformation("✓ Hybrid AI Scheduling test completed successfully");
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Hybrid AI Scheduling test failed");
+    }
 }
 
 // Configure the HTTP request pipeline.
