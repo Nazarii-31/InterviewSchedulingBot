@@ -37,13 +37,15 @@ builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
 // Register the Core Scheduling Logic
 builder.Services.AddSingleton<ICoreSchedulingLogic, CoreSchedulingLogic>();
 
-// Register the AI Scheduling Services (Hybrid Approach)
+// Register the AI Scheduling Services (Hybrid Approach) - Unified Service
 builder.Services.AddSingleton<ISchedulingHistoryRepository, InMemorySchedulingHistoryRepository>();
 builder.Services.AddSingleton<ISchedulingMLModel, SchedulingMLModel>();
-builder.Services.AddSingleton<IAISchedulingService, HybridAISchedulingService>();
+var hybridSchedulingService = new ServiceDescriptor(typeof(HybridAISchedulingService), typeof(HybridAISchedulingService), ServiceLifetime.Singleton);
+builder.Services.Add(hybridSchedulingService);
 
-// Register the Scheduling Service
-builder.Services.AddSingleton<ISchedulingService, SchedulingService>();
+// Register the same instance for both interfaces (AI and Basic scheduling)
+builder.Services.AddSingleton<IAISchedulingService>(provider => provider.GetRequiredService<HybridAISchedulingService>());
+builder.Services.AddSingleton<ISchedulingService>(provider => provider.GetRequiredService<HybridAISchedulingService>());
 
 // Register the Graph Scheduling Service (AI-driven scheduling)
 // Use mock service if configured, otherwise use real service

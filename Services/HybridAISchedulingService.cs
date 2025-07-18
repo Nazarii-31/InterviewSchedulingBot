@@ -9,11 +9,13 @@ namespace InterviewSchedulingBot.Services
 {
     /// <summary>
     /// Hybrid AI scheduling service that combines Microsoft Graph's native scheduling capabilities
-    /// with Azure OpenAI for intelligent recommendations and simplified user preference learning
+    /// with Azure OpenAI for intelligent recommendations and simplified user preference learning.
+    /// This is the unified scheduling service that replaces both basic and AI scheduling variants.
     /// </summary>
-    public class HybridAISchedulingService : IAISchedulingService
+    public class HybridAISchedulingService : IAISchedulingService, ISchedulingService
     {
         private readonly IGraphSchedulingService _graphSchedulingService;
+        private readonly IGraphCalendarService _calendarService;
         private readonly ISchedulingHistoryRepository _historyRepository;
         private readonly IAuthenticationService _authService;
         private readonly ILogger<HybridAISchedulingService> _logger;
@@ -22,12 +24,14 @@ namespace InterviewSchedulingBot.Services
 
         public HybridAISchedulingService(
             IGraphSchedulingService graphSchedulingService,
+            IGraphCalendarService calendarService,
             ISchedulingHistoryRepository historyRepository,
             IAuthenticationService authService,
             ILogger<HybridAISchedulingService> logger,
             IConfiguration configuration)
         {
             _graphSchedulingService = graphSchedulingService;
+            _calendarService = calendarService;
             _historyRepository = historyRepository;
             _authService = authService;
             _logger = logger;
@@ -668,5 +672,168 @@ Provide brief insights on what went well or what could be improved for future sc
         {
             return timeOfDay >= preferences.OptimalStartTime && timeOfDay <= preferences.OptimalEndTime;
         }
+
+        #region ISchedulingService Implementation (Basic Scheduling Methods)
+
+        /// <summary>
+        /// Finds available time slots using basic scheduling logic (non-AI)
+        /// This method provides compatibility with the original ISchedulingService interface
+        /// </summary>
+        public async Task<SchedulingResponse> FindAvailableTimeSlotsAsync(AvailabilityRequest request, string userId)
+        {
+            try
+            {
+                if (!request.IsValid())
+                {
+                    return SchedulingResponse.CreateFailure("Invalid availability request parameters", request);
+                }
+
+                _logger.LogInformation("Finding available time slots for user {UserId} with {AttendeeCount} attendees using basic scheduling", 
+                    userId, request.AttendeeEmails.Count);
+
+                // Get busy times for all attendees
+                var attendeeBusyTimes = await _calendarService.GetFreeBusyInformationAsync(
+                    request.AttendeeEmails, 
+                    request.StartDate, 
+                    request.EndDate, 
+                    userId);
+
+                // Find common availability
+                var availableSlots = GetCommonAvailability(attendeeBusyTimes, request);
+
+                if (availableSlots.Count == 0)
+                {
+                    return SchedulingResponse.CreateFailure(
+                        "No common availability found for the specified attendees and time period", 
+                        request);
+                }
+
+                return SchedulingResponse.CreateSuccess(availableSlots, request);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error finding available time slots for user {UserId}", userId);
+                return SchedulingResponse.CreateFailure($"Error finding available time slots: {ex.Message}", request);
+            }
+        }
+
+        public List<AvailableTimeSlot> GetCommonAvailability(Dictionary<string, List<AvailableTimeSlot>> attendeeBusyTimes, AvailabilityRequest request)
+        {
+            // Generate all possible working hour slots within the date range
+            var workingHourSlots = GenerateWorkingHourSlots(request.StartDate, request.EndDate, request);
+
+            // Find slots that don't conflict with any attendee's busy times
+            var availableSlots = new List<AvailableTimeSlot>();
+
+            foreach (var workingSlot in workingHourSlots)
+            {
+                if (workingSlot.CanAccommodate(request.DurationMinutes))
+                {
+                    // Check if this slot conflicts with any attendee's busy time
+                    bool isAvailable = true;
+                    
+                    foreach (var attendeeEmail in request.AttendeeEmails)
+                    {
+                        if (attendeeBusyTimes.ContainsKey(attendeeEmail))
+                        {
+                            var busyTimes = attendeeBusyTimes[attendeeEmail];
+                            
+                            // Check if the required duration slot conflicts with any busy time
+                            var requiredSlot = new AvailableTimeSlot(workingSlot.StartTime, 
+                                workingSlot.StartTime.AddMinutes(request.DurationMinutes));
+                            
+                            if (busyTimes.Any(busyTime => busyTime.OverlapsWith(requiredSlot)))
+                            {
+                                isAvailable = false;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (isAvailable)
+                    {
+                        // Create a slot with the exact duration needed
+                        var availableSlot = new AvailableTimeSlot(workingSlot.StartTime, 
+                            workingSlot.StartTime.AddMinutes(request.DurationMinutes));
+                        availableSlots.Add(availableSlot);
+                    }
+                }
+            }
+
+            // Remove overlapping slots and limit results
+            var optimizedSlots = OptimizeTimeSlots(availableSlots, request.DurationMinutes);
+            
+            // Sort by start time and take top 20 results
+            return optimizedSlots.OrderBy(slot => slot.StartTime).Take(20).ToList();
+        }
+
+        public List<AvailableTimeSlot> FilterByWorkingHours(List<AvailableTimeSlot> timeSlots, AvailabilityRequest request)
+        {
+            return timeSlots.Where(slot =>
+            {
+                var startTime = slot.StartTime.TimeOfDay;
+                var endTime = slot.EndTime.TimeOfDay;
+                
+                return request.WorkingDays.Contains(slot.StartTime.DayOfWeek) &&
+                       startTime >= request.WorkingHoursStart &&
+                       endTime <= request.WorkingHoursEnd;
+            }).ToList();
+        }
+
+        public List<AvailableTimeSlot> GenerateWorkingHourSlots(DateTime startDate, DateTime endDate, AvailabilityRequest request)
+        {
+            var workingSlots = new List<AvailableTimeSlot>();
+            var currentDate = startDate.Date;
+
+            while (currentDate <= endDate.Date)
+            {
+                // Check if current date is a working day
+                if (request.WorkingDays.Contains(currentDate.DayOfWeek))
+                {
+                    var workingStart = currentDate.Add(request.WorkingHoursStart);
+                    var workingEnd = currentDate.Add(request.WorkingHoursEnd);
+
+                    // Adjust for the actual start/end dates
+                    if (workingStart < startDate)
+                        workingStart = startDate;
+                    if (workingEnd > endDate)
+                        workingEnd = endDate;
+
+                    // Generate 30-minute slots within working hours
+                    var slotStart = workingStart;
+                    while (slotStart.AddMinutes(30) <= workingEnd)
+                    {
+                        var slotEnd = slotStart.AddMinutes(30);
+                        workingSlots.Add(new AvailableTimeSlot(slotStart, slotEnd));
+                        slotStart = slotStart.AddMinutes(30);
+                    }
+                }
+
+                currentDate = currentDate.AddDays(1);
+            }
+
+            return workingSlots;
+        }
+
+        private List<AvailableTimeSlot> OptimizeTimeSlots(List<AvailableTimeSlot> availableSlots, int durationMinutes)
+        {
+            var optimized = new List<AvailableTimeSlot>();
+            var sorted = availableSlots.OrderBy(slot => slot.StartTime).ToList();
+
+            foreach (var slot in sorted)
+            {
+                // Skip if this slot overlaps with an already selected slot
+                bool overlaps = optimized.Any(existing => slot.OverlapsWith(existing));
+                
+                if (!overlaps)
+                {
+                    optimized.Add(slot);
+                }
+            }
+
+            return optimized;
+        }
+
+        #endregion
     }
 }

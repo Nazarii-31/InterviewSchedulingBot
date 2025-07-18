@@ -6,6 +6,34 @@ using Microsoft.Extensions.Configuration;
 
 namespace InterviewSchedulingBot.Tests
 {
+    public class MockAuthenticationService : IAuthenticationService
+    {
+        public Task<string?> GetAccessTokenAsync(string userId)
+        {
+            return Task.FromResult<string?>("mock-token");
+        }
+        
+        public Task StoreTokenAsync(string userId, string accessToken, string? refreshToken = null, DateTimeOffset? expiresOn = null)
+        {
+            return Task.CompletedTask;
+        }
+        
+        public Task<bool> IsUserAuthenticatedAsync(string userId)
+        {
+            return Task.FromResult(true);
+        }
+        
+        public Task ClearTokenAsync(string userId)
+        {
+            return Task.CompletedTask;
+        }
+        
+        public string GetAuthorizationUrl(string userId, string conversationId)
+        {
+            return "https://mock-auth-url.com";
+        }
+    }
+
     public static class HybridAISchedulingTest
     {
         public static async Task RunHybridAISchedulingTest()
@@ -22,12 +50,14 @@ namespace InterviewSchedulingBot.Tests
             // Create mock services
             var mockAuthService = new MockAuthenticationService();
             var mockGraphSchedulingService = new MockGraphSchedulingService();
+            var mockGraphCalendarService = new GraphCalendarService(config, mockAuthService);
             var mockHistoryRepository = new InMemorySchedulingHistoryRepository(
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<InMemorySchedulingHistoryRepository>.Instance);
 
             // Create hybrid AI scheduling service
             var hybridService = new HybridAISchedulingService(
                 mockGraphSchedulingService,
+                mockGraphCalendarService,
                 mockHistoryRepository,
                 mockAuthService,
                 logger,
