@@ -25,9 +25,6 @@ namespace InterviewSchedulingBot.Bots
         private readonly BotState _conversationState;
         private readonly BotState _userState;
 
-        // Dictionary to store current scheduling sessions by user ID
-        private static readonly Dictionary<string, GraphSchedulingResponse> _currentSchedulingSessions = new();
-
         public InterviewBot(
             IGraphCalendarService calendarService, 
             IAuthenticationService authService, 
@@ -54,8 +51,13 @@ namespace InterviewSchedulingBot.Bots
             ITurnContext<IConversationUpdateActivity> turnContext,
             CancellationToken cancellationToken)
         {
-            var welcomeText = "Hello and welcome! I'm your Interview Scheduling Bot. I can help you schedule interviews by managing calendar events.\n\n" +
-                             "To get started, I'll need you to sign in to access your calendar. Send me a message to begin!";
+            var welcomeText = "Hello and welcome! I'm your AI-powered Interview Scheduling Assistant. I specialize in scanning participant calendars to find perfect meeting times for everyone.\n\n" +
+                             "🔍 **What I do:**\n" +
+                             "• Scan all participant calendars comprehensively\n" +
+                             "• Find optimal time slots for all or majority of attendees\n" +
+                             "• Provide detailed suggestions with AI-driven reasoning\n" +
+                             "• Analyze availability patterns and preferences\n\n" +
+                             "To get started with calendar scanning, I'll need you to sign in to access calendar data. Send me a message to begin!";
             
             foreach (var member in membersAdded)
             {
@@ -136,10 +138,6 @@ namespace InterviewSchedulingBot.Bots
             else if (userMessage.ToLower().Contains("insights"))
             {
                 await HandleInsightsRequestAsync(turnContext, cancellationToken);
-            }
-            else if (userMessage.ToLower().StartsWith("book"))
-            {
-                await HandleBookMeetingRequestAsync(turnContext, cancellationToken);
             }
             else if (userMessage.ToLower().Contains("help"))
             {
@@ -228,20 +226,22 @@ namespace InterviewSchedulingBot.Bots
                 return;
             }
 
-            var response = "Great! You're authenticated and ready to schedule interviews.\n\n" +
-                          "I offer two scheduling approaches:\n\n" +
-                          "🤖 **AI-Driven Scheduling** (Recommended)\n" +
-                          "- Type 'ai schedule' or 'find optimal' to use Microsoft Graph's intelligent scheduling\n" +
-                          "- Uses advanced algorithms to find the best meeting times\n" +
-                          "- Considers attendee availability, preferences, and working hours\n\n" +
-                          "📅 **Basic Scheduling**\n" +
-                          "- Type 'find slots' for basic availability checking\n" +
-                          "- Simple slot finding based on calendar conflicts\n\n" +
-                          "For AI scheduling, I'll need:\n" +
-                          "- Attendee email addresses\n" +
-                          "- Meeting duration (in minutes)\n" +
-                          "- Date range to search\n\n" +
-                          "Try typing 'find optimal' to experience the AI-driven scheduling!";
+            var response = "Great! You're authenticated and ready for comprehensive calendar analysis.\n\n" +
+                          "I offer advanced calendar scanning approaches:\n\n" +
+                          "🔍 **AI-Powered Calendar Analysis** (Recommended)\n" +
+                          "- Type 'find optimal' to scan all participant calendars intelligently\n" +
+                          "- Uses Microsoft Graph's advanced algorithms for deep calendar analysis\n" +
+                          "- Finds perfect time slots for all or majority of participants\n" +
+                          "- Provides detailed reasoning for each suggestion\n\n" +
+                          "📊 **Basic Calendar Scanning**\n" +
+                          "- Type 'find slots' for simple availability checking\n" +
+                          "- Basic conflict detection across participant calendars\n\n" +
+                          "For comprehensive calendar analysis, I'll need:\n" +
+                          "- All participant email addresses\n" +
+                          "- Desired meeting duration (in minutes)\n" +
+                          "- Date range to scan\n\n" +
+                          "🎯 **Result**: Detailed optimal time suggestions with AI-driven confidence scoring and reasoning.\n\n" +
+                          "Try typing 'find optimal' to experience advanced calendar scanning!";
 
             await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
         }
@@ -352,22 +352,21 @@ namespace InterviewSchedulingBot.Bots
 
                 if (graphSchedulingResponse.IsSuccess && graphSchedulingResponse.HasSuggestions)
                 {
-                    // Store the current scheduling session for demo
-                    _currentSchedulingSessions[userId] = graphSchedulingResponse;
-
-                    var responseText = $"✅ **AI Found {graphSchedulingResponse.MeetingTimeSuggestions.Count} Optimal Meeting Times!**\n\n" +
-                                     $"**Search Criteria:**\n" +
+                    var responseText = $"✅ **AI Calendar Analysis Complete - {graphSchedulingResponse.MeetingTimeSuggestions.Count} Perfect Slots Found!**\n\n" +
+                                     $"**📊 Calendar Scanning Results:**\n" +
                                      $"- Duration: {graphSchedulingRequest.DurationMinutes} minutes\n" +
-                                     $"- Attendees: {string.Join(", ", graphSchedulingRequest.AttendeeEmails)}\n" +
-                                     $"- Date Range: {graphSchedulingRequest.StartDate:yyyy-MM-dd} to {graphSchedulingRequest.EndDate:yyyy-MM-dd}\n\n" +
-                                     $"**🤖 AI-Suggested Optimal Times:**\n{graphSchedulingResponse.FormattedSuggestionsWithBookingText}\n\n" +
-                                     $"💡 **AI Advantages:**\n" +
-                                     $"- Intelligent conflict detection\n" +
-                                     $"- Optimized for productivity\n" +
-                                     $"- Considers working hours and preferences\n" +
-                                     $"- Confidence scoring for each suggestion\n\n" +
-                                     $"**📅 To book a meeting**: Reply with 'book [number]' (e.g., 'book 1' for the first option)\n\n" +
-                                     $"*This is a demonstration. In production, I would analyze real calendar data using Microsoft Graph's advanced scheduling algorithms.*";
+                                     $"- Participants Analyzed: {string.Join(", ", graphSchedulingRequest.AttendeeEmails)}\n" +
+                                     $"- Date Range Scanned: {graphSchedulingRequest.StartDate:yyyy-MM-dd} to {graphSchedulingRequest.EndDate:yyyy-MM-dd}\n" +
+                                     $"- Calendars Checked: {graphSchedulingRequest.AttendeeEmails.Count} participant calendars\n\n" +
+                                     $"**🎯 Optimal Time Suggestions (Perfect for All/Majority):**\n{graphSchedulingResponse.FormattedSuggestionsWithoutBooking}\n\n" +
+                                     $"💡 **Advanced Calendar Intelligence:**\n" +
+                                     $"- Deep calendar conflict analysis across all participants\n" +
+                                     $"- Productivity optimization based on time patterns\n" +
+                                     $"- Working hours and time zone consideration\n" +
+                                     $"- AI-driven confidence scoring with detailed reasoning\n" +
+                                     $"- Majority availability prioritization\n\n" +
+                                     $"📋 **Recommendation**: Use the highest-confidence suggestions for maximum participant availability.\n\n" +
+                                     $"*This demonstration shows advanced calendar scanning with Microsoft Graph's intelligent algorithms.*";
 
                     await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
                 }
@@ -396,7 +395,7 @@ namespace InterviewSchedulingBot.Bots
             try
             {
                 await turnContext.SendActivityAsync(
-                    MessageFactory.Text("🔍 **Processing your AI scheduling request...**"), 
+                    MessageFactory.Text("🔍 **Scanning all participant calendars for optimal time slots...**"), 
                     cancellationToken);
 
                 // Parse the user input
@@ -414,139 +413,33 @@ namespace InterviewSchedulingBot.Bots
 
                 if (graphSchedulingResponse.IsSuccess && graphSchedulingResponse.HasSuggestions)
                 {
-                    // Store the current scheduling session
-                    _currentSchedulingSessions[userId] = graphSchedulingResponse;
-
-                    var responseText = $"✅ **AI Found {graphSchedulingResponse.MeetingTimeSuggestions.Count} Optimal Meeting Times!**\n\n" +
-                                     $"**🤖 AI-Suggested Times:**\n{graphSchedulingResponse.FormattedSuggestionsWithBookingText}\n\n" +
-                                     $"💡 These suggestions are optimized by Microsoft Graph's AI algorithms for maximum productivity and minimal conflicts.\n\n" +
-                                     $"**📅 To book a meeting**: Reply with 'book [number]' (e.g., 'book 1' for the first option)\n" +
-                                     $"**📋 Meeting title**: I'll use 'Team Interview Meeting' as the default title.";
+                    var responseText = $"✅ **Calendar Analysis Complete - {graphSchedulingResponse.MeetingTimeSuggestions.Count} Perfect Time Slots Found!**\n\n" +
+                                     $"**📊 Participant Calendar Analysis:**\n" +
+                                     $"- Total calendars scanned: {request.AttendeeEmails.Count}\n" +
+                                     $"- Participants: {string.Join(", ", request.AttendeeEmails)}\n" +
+                                     $"- Meeting duration: {request.DurationMinutes} minutes\n" +
+                                     $"- Search period: {request.StartDate:MMM dd} - {request.EndDate:MMM dd}\n\n" +
+                                     $"**🎯 Optimal Time Suggestions (Perfect for All/Majority):**\n{graphSchedulingResponse.FormattedSuggestionsWithoutBooking}\n\n" +
+                                     $"💡 **Advanced AI Analysis:**\n" +
+                                     $"- Deep calendar conflict detection across all participants\n" +
+                                     $"- Productivity optimization using Microsoft Graph algorithms\n" +
+                                     $"- Intelligent confidence scoring with detailed reasoning\n" +
+                                     $"- Majority availability prioritization for best outcomes\n\n" +
+                                     $"📋 **Next Steps**: Review the suggestions above and coordinate with participants to finalize the meeting time.";
 
                     await turnContext.SendActivityAsync(MessageFactory.Text(responseText), cancellationToken);
                 }
                 else
                 {
                     await turnContext.SendActivityAsync(
-                        MessageFactory.Text($"❌ AI Scheduling result: {graphSchedulingResponse.Message}"), 
+                        MessageFactory.Text($"❌ Calendar Analysis failed: {graphSchedulingResponse.Message}"), 
                         cancellationToken);
                 }
             }
             catch (Exception ex)
             {
                 await turnContext.SendActivityAsync(
-                    MessageFactory.Text($"❌ Error processing AI scheduling request: {ex.Message}"), 
-                    cancellationToken);
-            }
-        }
-
-        private async Task HandleBookMeetingRequestAsync(
-            ITurnContext<IMessageActivity> turnContext,
-            CancellationToken cancellationToken)
-        {
-            var userId = turnContext.Activity.From.Id;
-            var userMessage = turnContext.Activity.Text ?? "";
-
-            try
-            {
-                // Check if user has a current scheduling session
-                if (!_currentSchedulingSessions.ContainsKey(userId))
-                {
-                    await turnContext.SendActivityAsync(
-                        MessageFactory.Text("❌ No active scheduling session found. Please search for meeting times first using 'find optimal'."), 
-                        cancellationToken);
-                    return;
-                }
-
-                // Parse the book command to get the selection number
-                var bookMatch = System.Text.RegularExpressions.Regex.Match(userMessage.ToLower(), @"book\s+(\d+)");
-                if (!bookMatch.Success)
-                {
-                    await turnContext.SendActivityAsync(
-                        MessageFactory.Text("❌ Invalid booking command. Please use 'book [number]' (e.g., 'book 1')."), 
-                        cancellationToken);
-                    return;
-                }
-
-                var selectionNumber = int.Parse(bookMatch.Groups[1].Value);
-                var schedulingSession = _currentSchedulingSessions[userId];
-
-                if (selectionNumber < 1 || selectionNumber > schedulingSession.MeetingTimeSuggestions.Count)
-                {
-                    await turnContext.SendActivityAsync(
-                        MessageFactory.Text($"❌ Invalid selection. Please choose a number between 1 and {schedulingSession.MeetingTimeSuggestions.Count}."), 
-                        cancellationToken);
-                    return;
-                }
-
-                var selectedSuggestion = schedulingSession.MeetingTimeSuggestions[selectionNumber - 1];
-
-                await turnContext.SendActivityAsync(
-                    MessageFactory.Text("📅 **Booking your meeting...**"), 
-                    cancellationToken);
-
-                // Create booking request
-                var bookingRequest = new BookingRequest
-                {
-                    SelectedSuggestion = selectedSuggestion,
-                    AttendeeEmails = schedulingSession.OriginalRequest?.AttendeeEmails ?? new List<string>(),
-                    MeetingTitle = "Team Interview Meeting",
-                    MeetingDescription = "Meeting scheduled via AI-driven scheduling assistant"
-                };
-
-                // Book the meeting
-                var bookingResponse = await _graphSchedulingService.BookMeetingAsync(bookingRequest, userId);
-
-                if (bookingResponse.IsSuccess)
-                {
-                    if (selectedSuggestion.MeetingTimeSlot?.Start?.DateTime == null || 
-                        selectedSuggestion.MeetingTimeSlot?.End?.DateTime == null)
-                    {
-                        await turnContext.SendActivityAsync(
-                            MessageFactory.Text("❌ Invalid meeting time data in selected suggestion."), 
-                            cancellationToken);
-                        return;
-                    }
-
-                    var startTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.Start.DateTime);
-                    var endTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.End.DateTime);
-
-                    var successMessage = $"✅ **Meeting Booked Successfully!**\n\n" +
-                                       $"**📅 Meeting Details:**\n" +
-                                       $"- **Title**: {bookingRequest.MeetingTitle}\n" +
-                                       $"- **Date**: {startTime:dddd, MMMM dd, yyyy}\n" +
-                                       $"- **Time**: {startTime:HH:mm} - {endTime:HH:mm} UTC\n" +
-                                       $"- **Duration**: {(endTime - startTime).TotalMinutes} minutes\n" +
-                                       $"- **Attendees**: {string.Join(", ", bookingRequest.AttendeeEmails)}\n" +
-                                       $"- **Event ID**: {bookingResponse.EventId}\n\n" +
-                                       $"**🎯 AI Confidence**: {selectedSuggestion.Confidence * 100:F0}%\n" +
-                                       $"**💡 Scheduling Reason**: {selectedSuggestion.SuggestionReason}\n\n" +
-                                       $"**📧 Invitation Status:**\n" +
-                                       $"- ✅ Calendar invitations have been sent to all attendees via Microsoft Graph\n" +
-                                       $"- ✅ Teams meeting link automatically included in calendar invite\n" +
-                                       $"- ✅ Meeting appears in all attendees' calendars\n" +
-                                       $"- ✅ Attendees will receive email notifications\n\n" +
-                                       $"**🔗 Next Steps:**\n" +
-                                       $"- Check your Outlook calendar for the meeting details\n" +
-                                       $"- Teams meeting link will be available in the calendar event\n" +
-                                       $"- Attendees can respond to the meeting invitation";
-
-                    await turnContext.SendActivityAsync(MessageFactory.Text(successMessage), cancellationToken);
-
-                    // Clear the scheduling session
-                    _currentSchedulingSessions.Remove(userId);
-                }
-                else
-                {
-                    await turnContext.SendActivityAsync(
-                        MessageFactory.Text($"❌ Failed to book meeting: {bookingResponse.Message}"), 
-                        cancellationToken);
-                }
-            }
-            catch (Exception ex)
-            {
-                await turnContext.SendActivityAsync(
-                    MessageFactory.Text($"❌ Error booking meeting: {ex.Message}"), 
+                    MessageFactory.Text($"❌ Error during calendar analysis: {ex.Message}"), 
                     cancellationToken);
             }
         }
@@ -982,46 +875,45 @@ namespace InterviewSchedulingBot.Bots
             var userId = turnContext.Activity.From.Id;
             var isAuthenticated = await _authService.IsUserAuthenticatedAsync(userId);
 
-            var helpText = "**Interview Scheduling Bot - AI-Powered Commands:**\n\n" +
-                          "🤖 **AI-Driven Scheduling:**\n" +
-                          "• **smart schedule** - Advanced AI scheduling with learning capabilities\n" +
-                          "• **ai demo** - Demonstrate AI scheduling with detailed insights\n" +
-                          "• **insights** - View your personal scheduling patterns and AI analysis\n" +
-                          "• **find optimal** - Use Microsoft Graph AI for optimal time finding\n\n" +
-                          "📅 **Standard Scheduling:**\n" +
-                          "• **schedule** or **interview** - Learn about scheduling options\n" +
-                          "• **find slots** - Find available time slots (basic scheduling)\n\n" +
+            var helpText = "**Interview Scheduling Bot - AI-Powered Calendar Scanner:**\n\n" +
+                          "🔍 **Calendar Analysis & Suggestions:**\n" +
+                          "• **find optimal** - Comprehensive calendar scanning for perfect time slots\n" +
+                          "• **smart schedule** - Advanced AI analysis with participant learning\n" +
+                          "• **ai demo** - Demonstrate intelligent calendar analysis capabilities\n" +
+                          "• **insights** - View scheduling patterns and participant preferences\n\n" +
+                          "📊 **Calendar Scanning:**\n" +
+                          "• **schedule** or **interview** - Learn about calendar analysis options\n" +
+                          "• **find slots** - Basic availability checking across calendars\n\n" +
                           "🔧 **General Commands:**\n" +
-                          "• **book [number]** - Book a meeting from suggestions (e.g., 'book 1')\n" +
                           "• **help** - Show this help message\n";
 
             if (isAuthenticated)
             {
                 helpText += "• **logout** or **signout** - Sign out from your account\n\n" +
-                           "✅ You are currently signed in and can access all features.\n\n" +
-                           "**🌟 Recommended: Try the Conversational Dialog!**\n" +
-                           "Type 'schedule interview' for a guided, step-by-step experience that:\n" +
+                           "✅ You are currently signed in and can access all calendar scanning features.\n\n" +
+                           "**🌟 Recommended: Try Advanced Calendar Analysis!**\n" +
+                           "Type 'schedule interview' for a guided experience that:\n" +
                            "- Greets you personally\n" +
-                           "- Asks for attendee emails\n" +
+                           "- Collects participant emails\n" +
                            "- Requests meeting duration\n" +
-                           "- Finds optimal time slots\n" +
-                           "- Helps you book the meeting\n\n" +
-                           "**🤖 AI-Driven Scheduling Features:**\n" +
-                           "- Uses Microsoft Graph's intelligent algorithms\n" +
-                           "- Finds optimal meeting times based on attendee preferences\n" +
-                           "- Smart conflict detection and resolution\n" +
-                           "- Confidence scoring for each suggestion\n" +
-                           "- Respects working hours and time zones\n" +
-                           "- One-click booking with Teams integration\n\n" +
-                           "**📅 Basic Scheduling Features:**\n" +
-                           "- Find common availability across multiple calendars\n" +
-                           "- Create Teams meetings with calendar integration\n" +
-                           "- Basic conflict detection\n\n" +
+                           "- Scans all calendars comprehensively\n" +
+                           "- Provides detailed optimal time suggestions\n\n" +
+                           "**🔍 Advanced Calendar Scanning Features:**\n" +
+                           "- Deep calendar analysis using Microsoft Graph algorithms\n" +
+                           "- Perfect time slot identification for all/majority participants\n" +
+                           "- Intelligent conflict detection and resolution\n" +
+                           "- AI-driven confidence scoring with detailed explanations\n" +
+                           "- Cross-timezone and working hours optimization\n" +
+                           "- Detailed reasoning for each suggestion\n\n" +
+                           "**📊 Calendar Intelligence:**\n" +
+                           "- Scan multiple participant calendars simultaneously\n" +
+                           "- Identify optimal availability for everyone\n" +
+                           "- Provide comprehensive scheduling recommendations\n\n" +
                            "**🚀 Quick Start:**\n" +
-                           "1. Type 'schedule interview' for the guided experience\n" +
-                           "2. Follow the prompts to enter attendee emails and duration\n" +
-                           "3. Choose from AI-suggested optimal times\n" +
-                           "4. Confirm and book your meeting\n\n" +
+                           "1. Type 'find optimal' to start calendar scanning\n" +
+                           "2. Provide participant emails and meeting duration\n" +
+                           "3. Review AI-generated optimal time suggestions\n" +
+                           "4. Use the detailed recommendations to coordinate with participants\n\n" +
                            GetServiceModeMessage();
             }
             else

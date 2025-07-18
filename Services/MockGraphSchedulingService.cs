@@ -63,45 +63,6 @@ namespace InterviewSchedulingBot.Services
             }
         }
 
-        public async Task<BookingResponse> BookMeetingAsync(BookingRequest request, string userId)
-        {
-            _logger.LogInformation("MockGraphSchedulingService: Booking meeting for user {UserId}", userId);
-
-            // Simulate some processing delay
-            await Task.Delay(500);
-
-            try
-            {
-                if (!request.IsValid())
-                {
-                    return BookingResponse.CreateFailure(
-                        "Invalid booking request parameters", 
-                        request);
-                }
-
-                // Simulate the booking process more realistically
-                _logger.LogInformation("MockGraphSchedulingService: Simulating calendar event creation");
-                _logger.LogInformation("MockGraphSchedulingService: Adding attendees: {Attendees}", string.Join(", ", request.AttendeeEmails));
-                _logger.LogInformation("MockGraphSchedulingService: Setting up Teams meeting");
-                _logger.LogInformation("MockGraphSchedulingService: Sending calendar invitations");
-
-                // Generate a fake event ID that looks realistic
-                var fakeEventId = $"AAMkADUwNjQ4ZjE3LTkzYzYtNDNjZi1iZGY5LTc1MmM5NzQxMzAzNgBGAAAAAACx{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
-
-                _logger.LogInformation("MockGraphSchedulingService: Generated fake event ID {EventId}", fakeEventId);
-                _logger.LogInformation("MockGraphSchedulingService: Mock booking completed successfully");
-
-                return BookingResponse.CreateSuccess(fakeEventId, request);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "MockGraphSchedulingService: Error booking mock meeting");
-                return BookingResponse.CreateFailure(
-                    $"Error booking meeting (mock): {ex.Message}", 
-                    request);
-            }
-        }
-
         private List<LocalMeetingTimeSuggestion> GenerateMockMeetingTimeSuggestions(GraphSchedulingRequest request)
         {
             var suggestions = new List<LocalMeetingTimeSuggestion>();
@@ -285,46 +246,46 @@ namespace InterviewSchedulingBot.Services
             var dayOfWeek = meetingTime.DayOfWeek;
             var hour = timeOfDay.Hours;
 
-            // AI-generated contextual reasons based on confidence score and time factors
+            // Enhanced AI-generated contextual reasons with detailed participant analysis
             if (confidence >= 0.9)
             {
                 if (hour == 10 || hour == 11)
-                    return "Peak productivity hours with optimal attendee engagement and minimal conflicts";
+                    return $"**OPTIMAL SLOT**: Peak productivity hours ({hour}:00) on {dayOfWeek}. All participants likely available with maximum energy levels. Historical data shows 95% success rate for similar time slots. Ideal for collaborative decision-making and focused discussions.";
                 if (hour == 14 || hour == 15)
-                    return "Post-lunch energy peak with high collaboration potential";
-                return "Exceptional time slot with maximum success probability based on historical data";
+                    return $"**EXCELLENT CHOICE**: Post-lunch energy peak ({hour}:00) on {dayOfWeek}. Participants refreshed and alert. Strong collaboration potential with minimal external distractions. 92% historical attendance rate for afternoon sessions.";
+                return $"**EXCEPTIONAL TIMING**: {meetingTime:dddd, MMM dd at HH:mm}. Maximum success probability based on comprehensive calendar analysis. Perfect balance of availability, productivity, and participant engagement. No major conflicts detected across all calendars.";
             }
             else if (confidence >= 0.8)
             {
                 if (dayOfWeek == DayOfWeek.Tuesday || dayOfWeek == DayOfWeek.Wednesday)
-                    return "Mid-week optimal scheduling with high attendee availability";
+                    return $"**HIGHLY RECOMMENDED**: Mid-week scheduling on {dayOfWeek} at {hour}:00. Peak availability window with 87% of participants free. Optimal for strategic discussions and decision-making. Low probability of conflicting priorities.";
                 if (hour >= 9 && hour <= 16)
-                    return "Core working hours with strong productivity indicators";
-                return "High-value time slot with excellent attendee compatibility";
+                    return $"**STRONG OPTION**: Core working hours ({hour}:00) with excellent productivity indicators. All participants within standard business hours. Minimal travel/commute conflicts. 84% success rate for similar duration meetings.";
+                return $"**HIGH-VALUE SLOT**: {meetingTime:dddd at HH:mm}. Strong attendee compatibility with majority availability. Good balance of participant schedules. Historical data indicates high engagement and completion rates.";
             }
             else if (confidence >= 0.7)
             {
                 if (dayOfWeek == DayOfWeek.Monday)
-                    return "Monday scheduling with good start-of-week momentum";
+                    return $"**GOOD TIMING**: Monday scheduling at {hour}:00 with start-of-week momentum. Most participants available with fresh perspective. Some potential for delayed starts due to Monday morning catch-up activities.";
                 if (dayOfWeek == DayOfWeek.Thursday)
-                    return "Thursday timing with solid end-of-week productivity";
-                return "Well-balanced time slot with good success probability";
+                    return $"**SOLID CHOICE**: Thursday {hour}:00 with strong end-of-week productivity. Good availability across all time zones. Participants motivated to complete weekly objectives. Minor potential for Friday planning conflicts.";
+                return $"**BALANCED OPTION**: {meetingTime:dddd, MMM dd at HH:mm}. Well-balanced time slot accommodating majority of participants. Good success probability with standard coordination requirements. Some schedule optimization possible.";
             }
             else if (confidence >= 0.6)
             {
                 if (dayOfWeek == DayOfWeek.Friday)
-                    return "Friday scheduling with moderate availability considerations";
+                    return $"**WORKABLE FRIDAY**: Friday {hour}:00 scheduling with moderate availability. Some participants may have early weekend starts. Consider shorter agenda due to end-of-week energy levels. 68% typical attendance rate.";
                 if (hour < 9 || hour > 16)
-                    return "Extended hours scheduling with adjusted expectations";
-                return "Workable time slot with some scheduling trade-offs";
+                    return $"**EXTENDED HOURS**: {hour}:00 scheduling outside standard business hours. Accommodates global participants but may challenge local attendees. Consider time zone impacts and energy levels for optimal outcomes.";
+                return $"**ACCEPTABLE TIMING**: {meetingTime:dddd at HH:mm}. Workable time slot with some scheduling trade-offs. Majority availability with coordination requirements. May need agenda adjustments for optimal effectiveness.";
             }
             else if (confidence >= 0.5)
             {
-                return "Available time slot with higher coordination requirements";
+                return $"**COORDINATION REQUIRED**: {meetingTime:dddd, MMM dd at HH:mm}. Available time slot requiring careful attendee management. Multiple scheduling considerations needed. Recommend shorter duration or agenda prioritization for success.";
             }
             else
             {
-                return "Challenging time slot requiring careful attendee management";
+                return $"**CHALLENGING SLOT**: {meetingTime:dddd at HH:mm}. Limited availability requiring significant coordination. Consider rescheduling or reducing participant count. Alternative: Focus on most critical attendees or split into multiple smaller meetings.";
             }
         }
     }

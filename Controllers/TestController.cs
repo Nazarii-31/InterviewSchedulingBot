@@ -246,22 +246,22 @@ namespace InterviewSchedulingBot.Controllers
 <body>
     <div class=""container"">
         <div class=""header"">
-            <h1>🤖 AI Interview Scheduling Bot</h1>
-            <p>Production-Ready Hybrid AI Scheduling System</p>
+            <h1>🔍 AI Calendar Scanning Assistant</h1>
+            <p>Advanced Calendar Analysis System for Perfect Meeting Time Discovery</p>
         </div>
 
         <div class=""teams-info"">
-            <h3>🎯 Hybrid AI Scheduling System - Production Ready</h3>
+            <h3>🎯 AI Calendar Scanning System - Production Ready</h3>
             <div style=""display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px;"">
                 <div>
-                    <p><strong>🎯 System Goal:</strong> Unified AI-powered scheduling that combines Microsoft Graph with machine learning</p>
-                    <p><strong>💡 Key Innovation:</strong> Hybrid approach using Graph API + AI user preference learning + OpenAI insights</p>
-                    <p><strong>🔧 Technology:</strong> Microsoft Graph FindMeetingTimes + Custom ML Models + Azure OpenAI</p>
+                    <p><strong>🎯 System Goal:</strong> Comprehensive calendar analysis that scans all participants to find perfect meeting times</p>
+                    <p><strong>💡 Key Innovation:</strong> Deep calendar scanning using Graph API + AI pattern recognition + intelligent suggestions</p>
+                    <p><strong>🔧 Technology:</strong> Microsoft Graph Calendar API + Custom AI Models + Detailed Reasoning Engine</p>
                 </div>
                 <div>
-                    <p><strong>📊 AI Features:</strong> Intelligent time prediction, user behavior learning, dynamic adaptation</p>
-                    <p><strong>🎪 Demo Status:</strong> Production-ready with comprehensive mock data and real Graph integration</p>
-                    <p><strong>📱 Deployment:</strong> Ready for MS Teams with Azure Bot Framework registration</p>
+                    <p><strong>📊 Core Features:</strong> Multi-calendar scanning, optimal time identification, detailed suggestion explanations</p>
+                    <p><strong>🎪 Demo Status:</strong> Production-ready calendar analysis with comprehensive participant data scanning</p>
+                    <p><strong>📱 Deployment:</strong> Ready for MS Teams with advanced calendar intelligence capabilities</p>
                 </div>
             </div>
         </div>
@@ -272,28 +272,28 @@ namespace InterviewSchedulingBot.Controllers
                 <div>
                     <h4>🏛️ Before (0-5 min)</h4>
                     <ul style=""list-style: none; padding: 0;"">
-                        <li>✓ Multiple scheduling services</li>
-                        <li>✓ Hardcoded preferences</li>
-                        <li>✓ Fixed confidence scoring</li>
-                        <li>✓ No learning capability</li>
+                        <li>✓ Manual calendar checking</li>
+                        <li>✓ Time-consuming coordination</li>
+                        <li>✓ Limited participant analysis</li>
+                        <li>✓ Basic availability checking</li>
                     </ul>
                 </div>
                 <div>
                     <h4>🎯 After (5-10 min)</h4>
                     <ul style=""list-style: none; padding: 0;"">
-                        <li>✓ Unified hybrid AI system</li>
-                        <li>✓ Graph API + ML learning</li>
-                        <li>✓ Adaptive recommendations</li>
-                        <li>✓ 85% prediction accuracy</li>
+                        <li>✓ Automated calendar scanning</li>
+                        <li>✓ Perfect slot identification</li>
+                        <li>✓ Detailed suggestion reasoning</li>
+                        <li>✓ AI-driven optimal time discovery</li>
                     </ul>
                 </div>
                 <div>
                     <h4>📈 Results (10-15 min)</h4>
                     <ul style=""list-style: none; padding: 0;"">
-                        <li>✓ Production-ready system</li>
-                        <li>✓ Reduced complexity</li>
-                        <li>✓ Better Microsoft integration</li>
-                        <li>✓ Cost-effective solution</li>
+                        <li>✓ Comprehensive calendar analysis</li>
+                        <li>✓ Perfect meeting time suggestions</li>
+                        <li>✓ Detailed reasoning for each option</li>
+                        <li>✓ Efficient participant coordination</li>
                     </ul>
                 </div>
             </div>
@@ -301,19 +301,19 @@ namespace InterviewSchedulingBot.Controllers
 
         <div class=""dashboard"">
             <div class=""test-card"">
-                <h3>🧠 Hybrid AI Scheduling Engine</h3>
-                <p><strong>What it does:</strong> The production-ready hybrid AI system that combines Microsoft Graph's FindMeetingTimes API with machine learning for user preferences and Azure OpenAI for intelligent recommendations.</p>
+                <h3>🔍 AI Calendar Scanning Engine</h3>
+                <p><strong>What it does:</strong> The production-ready calendar analysis system that scans all participant calendars using Microsoft Graph to find perfect meeting times for everyone or the majority, providing detailed AI-driven suggestions.</p>
                 
                 <div class=""sample-data"">
-                    <h4>📋 Production System Features:</h4>
-                    <p>• <strong>Primary Engine:</strong> Microsoft Graph FindMeetingTimes API for enterprise-grade scheduling</p>
-                    <p>• <strong>AI Enhancement:</strong> <code>HybridAISchedulingService.cs</code> - unified service with ML-powered user preference learning</p>
-                    <p>• <strong>Intelligence Layer:</strong> Azure OpenAI integration for natural language insights and recommendations</p>
-                    <p>• <strong>Expected Result:</strong> 3-5 intelligent meeting suggestions with 70-85% confidence scores and reasoning</p>
+                    <h4>📋 Calendar Scanning Features:</h4>
+                    <p>• <strong>Primary Engine:</strong> Microsoft Graph Calendar API for comprehensive participant calendar analysis</p>
+                    <p>• <strong>AI Enhancement:</strong> <code>HybridAISchedulingService.cs</code> - intelligent calendar scanning with pattern recognition</p>
+                    <p>• <strong>Suggestion Engine:</strong> Detailed reasoning for each optimal time slot with confidence scoring</p>
+                    <p>• <strong>Expected Result:</strong> 3-5 perfect time suggestions with detailed explanations for optimal participant coordination</p>
                 </div>
 
                 <div class=""input-group"">
-                    <label>👥 Meeting Participants:</label>
+                    <label>👥 Participants to Scan:</label>
                     <div class=""input-row"">
                         <input type=""email"" id=""attendee1"" value=""john.smith@company.com"" placeholder=""First participant"">
                         <input type=""email"" id=""attendee2"" value=""jane.doe@company.com"" placeholder=""Second participant"">
@@ -321,7 +321,7 @@ namespace InterviewSchedulingBot.Controllers
                 </div>
 
                 <div class=""input-group"">
-                    <label>⏱️ Meeting Details:</label>
+                    <label>⏱️ Meeting Requirements:</label>
                     <div class=""input-row"">
                         <select id=""duration"">
                             <option value=""30"">30 minutes</option>
@@ -330,14 +330,14 @@ namespace InterviewSchedulingBot.Controllers
                             <option value=""90"">90 minutes</option>
                         </select>
                         <select id=""days"">
-                            <option value=""3"">Next 3 days</option>
-                            <option value=""7"" selected>Next 7 days</option>
-                            <option value=""14"">Next 14 days</option>
+                            <option value=""3"">Scan next 3 days</option>
+                            <option value=""7"" selected>Scan next 7 days</option>
+                            <option value=""14"">Scan next 14 days</option>
                         </select>
                     </div>
                 </div>
 
-                <button class=""btn"" onclick=""testHybridScheduling()"">🚀 Test Hybrid AI Scheduling</button>
+                <button class=""btn"" onclick=""testHybridScheduling()"">🔍 Scan Calendars for Perfect Times</button>
                 <div id=""hybridResult"" class=""result"" style=""display:none;""></div>
             </div>
 
@@ -552,27 +552,30 @@ namespace InterviewSchedulingBot.Controllers
                 {
                     Success = response.IsSuccess,
                     Message = response.Message,
-                    SystemType = "Hybrid AI (Graph + ML + OpenAI)",
+                    SystemType = "AI Calendar Scanner (Graph + Intelligence)",
                     OverallConfidence = response.OverallConfidence,
                     ProcessingTime = response.ProcessingTimeMs,
-                    SuggestionsCount = response.PredictedTimeSlots?.Count ?? 0,
-                    MeetingSuggestions = response.PredictedTimeSlots?.Take(3).Select(p => new
+                    ParticipantsScanned = attendees.Count,
+                    CalendarsAnalyzed = attendees.Count,
+                    PerfectSlotsFound = response.PredictedTimeSlots?.Count ?? 0,
+                    OptimalTimeSuggestions = response.PredictedTimeSlots?.Take(3).Select(p => new
                     {
-                        StartTime = p.StartTime.ToString("yyyy-MM-dd HH:mm"),
+                        DateTime = p.StartTime.ToString("yyyy-MM-dd HH:mm"),
                         EndTime = p.EndTime.ToString("yyyy-MM-dd HH:mm"),
-                        Confidence = p.OverallConfidence,
-                        Reason = p.PredictionReason,
-                        IsOptimal = p.IsOptimalSlot,
-                        AISource = "Graph + ML"
+                        ConfidenceScore = p.OverallConfidence,
+                        DetailedReason = p.PredictionReason,
+                        PerfectForAll = p.IsOptimalSlot,
+                        AnalysisSource = "Calendar Scanning + AI"
                     }),
-                    AIRecommendations = response.Recommendations?.Take(3),
+                    IntelligentRecommendations = response.Recommendations?.Take(3),
                     AlgorithmVersion = response.AlgorithmVersion,
-                    HybridFeatures = new
+                    CalendarScanningFeatures = new
                     {
-                        GraphIntegration = "Microsoft FindMeetingTimes API",
-                        MachineLearning = "User preference learning",
-                        OpenAIInsights = "Natural language recommendations",
-                        ProductionReady = true
+                        GraphCalendarAPI = "Microsoft Graph Calendar Analysis",
+                        AIPatternRecognition = "Participant behavior learning",
+                        DetailedSuggestions = "Comprehensive reasoning for each time slot",
+                        ProductionReady = true,
+                        ScanningScope = "All participant calendars simultaneously"
                     }
                 });
             }

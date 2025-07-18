@@ -163,11 +163,5 @@ namespace InterviewSchedulingBot.Tests
             
             return GraphSchedulingResponse.CreateSuccess(suggestions, request);
         }
-
-        public async Task<BookingResponse> BookMeetingAsync(BookingRequest request, string userId)
-        {
-            await Task.Delay(50);
-            return BookingResponse.CreateSuccess("mock-meeting-id", request);
-        }
     }
 }
