@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview Scheduling Bot - Test Interface</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-calendar-alt"></i> Interview Scheduling Bot</h1>
+            <p>Test the bot functionality using the mock services - no Teams deployment required</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-button active" onclick="openTab(event, 'find-slots')">
+                <i class="fas fa-search"></i> Find Optimal Slots
+            </button>
+            <button class="tab-button" onclick="openTab(event, 'validate')">
+                <i class="fas fa-check-circle"></i> Validate Request
+            </button>
+            <button class="tab-button" onclick="openTab(event, 'analyze-conflicts')">
+                <i class="fas fa-exclamation-triangle"></i> Analyze Conflicts
+            </button>
+        </div>
+
+        <!-- Find Optimal Slots Tab -->
+        <div id="find-slots" class="tab-content active">
+            <div class="form-section">
+                <h3><i class="fas fa-clock"></i> Schedule Interview</h3>
+                <form id="scheduling-form">
+                    <div class="form-group">
+                        <label for="participants">Participant Emails (one per line):</label>
+                        <textarea id="participants" rows="4" placeholder="john.doe@company.com&#10;jane.smith@company.com&#10;interviewer@company.com">john.doe@company.com
+jane.smith@company.com
+interviewer@company.com</textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="duration">Duration (minutes):</label>
+                            <select id="duration">
+                                <option value="30">30 minutes</option>
+                                <option value="60" selected>60 minutes</option>
+                                <option value="90">90 minutes</option>
+                                <option value="120">120 minutes</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="interview-type">Interview Type:</label>
+                            <select id="interview-type">
+                                <option value="General" selected>General</option>
+                                <option value="Technical">Technical</option>
+                                <option value="Behavioral">Behavioral</option>
+                                <option value="Panel">Panel</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="priority">Priority:</label>
+                            <select id="priority">
+                                <option value="Low">Low</option>
+                                <option value="Normal" selected>Normal</option>
+                                <option value="High">High</option>
+                                <option value="Urgent">Urgent</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="earliest-date">Earliest Date:</label>
+                            <input type="datetime-local" id="earliest-date" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="latest-date">Latest Date:</label>
+                            <input type="datetime-local" id="latest-date" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="requester-id">Requester ID (optional):</label>
+                            <input type="text" id="requester-id" placeholder="requester@company.com">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="department">Department (optional):</label>
+                            <input type="text" id="department" placeholder="Engineering">
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-search"></i> Find Optimal Slots
+                    </button>
+                </form>
+            </div>
+            
+            <div id="scheduling-results" class="results-section" style="display: none;">
+                <h3><i class="fas fa-calendar-check"></i> Recommended Time Slots</h3>
+                <div id="recommended-slots"></div>
+                
+                <h3><i class="fas fa-calendar-plus"></i> Alternative Slots</h3>
+                <div id="alternative-slots"></div>
+                
+                <h3><i class="fas fa-lightbulb"></i> Business Insights</h3>
+                <div id="business-insights"></div>
+            </div>
+        </div>
+
+        <!-- Validate Request Tab -->
+        <div id="validate" class="tab-content">
+            <div class="form-section">
+                <h3><i class="fas fa-check-circle"></i> Validate Scheduling Request</h3>
+                <form id="validation-form">
+                    <div class="form-group">
+                        <label for="val-participants">Participant Emails (one per line):</label>
+                        <textarea id="val-participants" rows="4" placeholder="john.doe@company.com&#10;jane.smith@company.com">john.doe@company.com
+jane.smith@company.com</textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="val-duration">Duration (minutes):</label>
+                            <input type="number" id="val-duration" value="60" min="1" max="480">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="val-type">Interview Type:</label>
+                            <select id="val-type">
+                                <option value="General" selected>General</option>
+                                <option value="Technical">Technical</option>
+                                <option value="Behavioral">Behavioral</option>
+                                <option value="Panel">Panel</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="val-earliest">Earliest Date:</label>
+                            <input type="datetime-local" id="val-earliest" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="val-latest">Latest Date:</label>
+                            <input type="datetime-local" id="val-latest" required>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-check"></i> Validate Request
+                    </button>
+                </form>
+            </div>
+            
+            <div id="validation-results" class="results-section" style="display: none;">
+                <div id="validation-status"></div>
+                <div id="validation-errors"></div>
+                <div id="validation-warnings"></div>
+                <div id="validation-suggestions"></div>
+            </div>
+        </div>
+
+        <!-- Analyze Conflicts Tab -->
+        <div id="analyze-conflicts" class="tab-content">
+            <div class="form-section">
+                <h3><i class="fas fa-exclamation-triangle"></i> Analyze Scheduling Conflicts</h3>
+                <p class="info-text">
+                    <i class="fas fa-info-circle"></i>
+                    Note: This feature requires Teams bot context for full calendar access. 
+                    This demo shows the API interface structure.
+                </p>
+                <form id="conflict-form">
+                    <div class="form-group">
+                        <label for="conflict-participants">Participant Emails (one per line):</label>
+                        <textarea id="conflict-participants" rows="3" placeholder="john.doe@company.com&#10;jane.smith@company.com">john.doe@company.com
+jane.smith@company.com</textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="proposed-time">Proposed Time:</label>
+                            <input type="datetime-local" id="proposed-time" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="conflict-duration">Duration (minutes):</label>
+                            <input type="number" id="conflict-duration" value="60" min="1" max="480">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="access-token">Access Token (placeholder):</label>
+                        <input type="text" id="access-token" value="mock-token-for-demo" readonly>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-search"></i> Analyze Conflicts
+                    </button>
+                </form>
+            </div>
+            
+            <div id="conflict-results" class="results-section" style="display: none;">
+                <div id="conflict-status"></div>
+                <div id="conflict-details"></div>
+            </div>
+        </div>
+
+        <footer>
+            <div class="footer-content">
+                <p><i class="fas fa-cog"></i> Using Mock Services - Perfect for testing without Teams deployment</p>
+                <p><i class="fas fa-book"></i> <a href="/swagger" target="_blank">View API Documentation</a></p>
+            </div>
+        </footer>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Processing your request...</p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
