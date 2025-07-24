@@ -476,7 +476,517 @@ function displayError(containerId, message) {
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     initializeDates();
+    initializeMockData();
     
     // Show the first tab by default
     document.querySelector('.tab-button').click();
+});
+
+// Mock Data Management
+let mockData = {
+    userProfiles: [
+        {
+            id: '1',
+            name: 'John Doe',
+            email: 'john.doe@company.com',
+            jobTitle: 'Senior Software Engineer',
+            department: 'Engineering',
+            timeZone: 'Pacific Standard Time'
+        },
+        {
+            id: '2',
+            name: 'Jane Smith',
+            email: 'jane.smith@company.com',
+            jobTitle: 'Product Manager',
+            department: 'Product',
+            timeZone: 'Eastern Standard Time'
+        },
+        {
+            id: '3',
+            name: 'Bob Wilson',
+            email: 'interviewer@company.com',
+            jobTitle: 'Engineering Manager',
+            department: 'Engineering',
+            timeZone: 'Pacific Standard Time'
+        }
+    ],
+    workingHours: [
+        {
+            userEmail: 'john.doe@company.com',
+            timeZone: 'Pacific Standard Time',
+            daysOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+            startTime: '09:00:00',
+            endTime: '17:00:00'
+        },
+        {
+            userEmail: 'jane.smith@company.com',
+            timeZone: 'Eastern Standard Time',
+            daysOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+            startTime: '08:00:00',
+            endTime: '16:00:00'
+        },
+        {
+            userEmail: 'interviewer@company.com',
+            timeZone: 'Pacific Standard Time',
+            daysOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+            startTime: '08:30:00',
+            endTime: '17:30:00'
+        }
+    ],
+    presenceStatus: [
+        {
+            userEmail: 'john.doe@company.com',
+            availability: 'Available',
+            activity: 'Available',
+            lastModified: new Date().toISOString()
+        },
+        {
+            userEmail: 'jane.smith@company.com',
+            availability: 'Busy',
+            activity: 'InAMeeting',
+            lastModified: new Date().toISOString()
+        },
+        {
+            userEmail: 'interviewer@company.com',
+            availability: 'Available',
+            activity: 'Available',
+            lastModified: new Date().toISOString()
+        }
+    ],
+    calendarAvailability: [
+        {
+            userEmail: 'john.doe@company.com',
+            busySlots: [
+                {
+                    start: '2025-01-28T10:00:00Z',
+                    end: '2025-01-28T11:00:00Z',
+                    status: 'Busy',
+                    subject: 'Team Meeting'
+                },
+                {
+                    start: '2025-01-28T14:00:00Z',
+                    end: '2025-01-28T15:30:00Z',
+                    status: 'Busy',
+                    subject: 'Code Review'
+                }
+            ]
+        },
+        {
+            userEmail: 'jane.smith@company.com',
+            busySlots: [
+                {
+                    start: '2025-01-28T09:00:00Z',
+                    end: '2025-01-28T10:00:00Z',
+                    status: 'Busy',
+                    subject: 'Product Planning'
+                },
+                {
+                    start: '2025-01-28T15:00:00Z',
+                    end: '2025-01-28T16:00:00Z',
+                    status: 'Tentative',
+                    subject: 'Client Call'
+                }
+            ]
+        },
+        {
+            userEmail: 'interviewer@company.com',
+            busySlots: [
+                {
+                    start: '2025-01-28T11:00:00Z',
+                    end: '2025-01-28T12:00:00Z',
+                    status: 'Busy',
+                    subject: 'Interview - Candidate A'
+                }
+            ]
+        }
+    ]
+};
+
+// Initialize mock data display
+function initializeMockData() {
+    displayUserProfiles();
+    displayWorkingHours();
+    displayPresenceStatus();
+    displayCalendarAvailability();
+}
+
+// Display user profiles
+function displayUserProfiles() {
+    const container = document.getElementById('user-profiles');
+    const html = mockData.userProfiles.map(user => `
+        <div class="user-profile-card" data-user-id="${user.id}">
+            <div class="card-header">
+                <div class="card-title">
+                    <i class="fas fa-user"></i>
+                    <span class="editable-field" contenteditable="true" data-field="name">${user.name}</span>
+                </div>
+                <div class="card-actions">
+                    <button class="btn-small btn-edit" onclick="toggleEdit(this)">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-small btn-delete" onclick="deleteUser('${user.id}')">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-content">
+                <div class="data-field">
+                    <span class="field-label">Email:</span>
+                    <span class="field-value editable-field" contenteditable="true" data-field="email">${user.email}</span>
+                </div>
+                <div class="data-field">
+                    <span class="field-label">Job Title:</span>
+                    <span class="field-value editable-field" contenteditable="true" data-field="jobTitle">${user.jobTitle}</span>
+                </div>
+                <div class="data-field">
+                    <span class="field-label">Department:</span>
+                    <span class="field-value editable-field" contenteditable="true" data-field="department">${user.department}</span>
+                </div>
+                <div class="data-field">
+                    <span class="field-label">Time Zone:</span>
+                    <select class="field-value editable-select" data-field="timeZone">
+                        <option value="Pacific Standard Time" ${user.timeZone === 'Pacific Standard Time' ? 'selected' : ''}>Pacific Standard Time</option>
+                        <option value="Eastern Standard Time" ${user.timeZone === 'Eastern Standard Time' ? 'selected' : ''}>Eastern Standard Time</option>
+                        <option value="GMT Standard Time" ${user.timeZone === 'GMT Standard Time' ? 'selected' : ''}>GMT Standard Time</option>
+                        <option value="Central Standard Time" ${user.timeZone === 'Central Standard Time' ? 'selected' : ''}>Central Standard Time</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html + `
+        <div class="add-new-btn" onclick="addNewUser()">
+            <i class="fas fa-plus"></i>
+            Add New User
+        </div>
+    `;
+}
+
+// Display working hours
+function displayWorkingHours() {
+    const container = document.getElementById('working-hours');
+    const html = mockData.workingHours.map((hours, index) => `
+        <div class="working-hours-card" data-hours-index="${index}">
+            <div class="card-header">
+                <div class="card-title">
+                    <i class="fas fa-clock"></i>
+                    ${hours.userEmail}
+                </div>
+                <div class="card-actions">
+                    <button class="btn-small btn-edit" onclick="toggleEdit(this)">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn-small btn-delete" onclick="deleteWorkingHours(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-content">
+                <div class="data-field">
+                    <span class="field-label">Time Zone:</span>
+                    <select class="field-value editable-select" data-field="timeZone">
+                        <option value="Pacific Standard Time" ${hours.timeZone === 'Pacific Standard Time' ? 'selected' : ''}>Pacific Standard Time</option>
+                        <option value="Eastern Standard Time" ${hours.timeZone === 'Eastern Standard Time' ? 'selected' : ''}>Eastern Standard Time</option>
+                        <option value="GMT Standard Time" ${hours.timeZone === 'GMT Standard Time' ? 'selected' : ''}>GMT Standard Time</option>
+                        <option value="Central Standard Time" ${hours.timeZone === 'Central Standard Time' ? 'selected' : ''}>Central Standard Time</option>
+                    </select>
+                </div>
+                <div class="data-field">
+                    <span class="field-label">Start Time:</span>
+                    <input type="time" class="field-value editable-field" data-field="startTime" value="${hours.startTime}">
+                </div>
+                <div class="data-field">
+                    <span class="field-label">End Time:</span>
+                    <input type="time" class="field-value editable-field" data-field="endTime" value="${hours.endTime}">
+                </div>
+                <div class="data-field">
+                    <span class="field-label">Days:</span>
+                    <span class="field-value">${hours.daysOfWeek.join(', ')}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+// Display presence status
+function displayPresenceStatus() {
+    const container = document.getElementById('presence-status');
+    const html = mockData.presenceStatus.map((presence, index) => `
+        <div class="presence-card" data-presence-index="${index}">
+            <div class="card-header">
+                <div class="card-title">
+                    <i class="fas fa-signal"></i>
+                    ${presence.userEmail}
+                </div>
+                <div class="card-actions">
+                    <button class="btn-small btn-edit" onclick="toggleEdit(this)">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-content">
+                <div class="data-field">
+                    <span class="field-label">Availability:</span>
+                    <select class="field-value editable-select" data-field="availability">
+                        <option value="Available" ${presence.availability === 'Available' ? 'selected' : ''}>Available</option>
+                        <option value="Busy" ${presence.availability === 'Busy' ? 'selected' : ''}>Busy</option>
+                        <option value="DoNotDisturb" ${presence.availability === 'DoNotDisturb' ? 'selected' : ''}>Do Not Disturb</option>
+                        <option value="Away" ${presence.availability === 'Away' ? 'selected' : ''}>Away</option>
+                        <option value="BeRightBack" ${presence.availability === 'BeRightBack' ? 'selected' : ''}>Be Right Back</option>
+                    </select>
+                </div>
+                <div class="data-field">
+                    <span class="field-label">Activity:</span>
+                    <select class="field-value editable-select" data-field="activity">
+                        <option value="Available" ${presence.activity === 'Available' ? 'selected' : ''}>Available</option>
+                        <option value="InACall" ${presence.activity === 'InACall' ? 'selected' : ''}>In a Call</option>
+                        <option value="InAMeeting" ${presence.activity === 'InAMeeting' ? 'selected' : ''}>In a Meeting</option>
+                        <option value="Busy" ${presence.activity === 'Busy' ? 'selected' : ''}>Busy</option>
+                        <option value="Away" ${presence.activity === 'Away' ? 'selected' : ''}>Away</option>
+                    </select>
+                </div>
+                <div class="data-field">
+                    <span class="field-label">Last Modified:</span>
+                    <span class="field-value">${new Date(presence.lastModified).toLocaleString()}</span>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+// Display calendar availability
+function displayCalendarAvailability() {
+    const container = document.getElementById('calendar-availability');
+    const html = mockData.calendarAvailability.map((calendar, index) => `
+        <div class="calendar-card" data-calendar-index="${index}">
+            <div class="card-header">
+                <div class="card-title">
+                    <i class="fas fa-calendar"></i>
+                    ${calendar.userEmail}
+                </div>
+                <div class="card-actions">
+                    <button class="btn-small btn-edit" onclick="addBusySlot(${index})">
+                        <i class="fas fa-plus"></i> Add Slot
+                    </button>
+                </div>
+            </div>
+            <div class="card-content">
+                ${calendar.busySlots.map((slot, slotIndex) => `
+                    <div class="busy-slot" data-slot-index="${slotIndex}">
+                        <div>
+                            <div class="slot-time">
+                                <input type="datetime-local" value="${slot.start.slice(0, -1)}" data-field="start" class="editable-field">
+                                to
+                                <input type="datetime-local" value="${slot.end.slice(0, -1)}" data-field="end" class="editable-field">
+                            </div>
+                            <div style="margin-top: 5px;">
+                                <input type="text" value="${slot.subject}" data-field="subject" class="editable-field" placeholder="Meeting subject">
+                            </div>
+                        </div>
+                        <div>
+                            <select class="slot-status status-${slot.status.toLowerCase()}" data-field="status">
+                                <option value="Busy" ${slot.status === 'Busy' ? 'selected' : ''}>Busy</option>
+                                <option value="Tentative" ${slot.status === 'Tentative' ? 'selected' : ''}>Tentative</option>
+                            </select>
+                            <button class="btn-small btn-delete" onclick="deleteBusySlot(${index}, ${slotIndex})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                `).join('')}
+                ${calendar.busySlots.length === 0 ? '<p style="color: #6c757d; font-style: italic;">No busy slots</p>' : ''}
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = html;
+}
+
+// Toggle edit mode for a card
+function toggleEdit(button) {
+    const card = button.closest('.user-profile-card, .working-hours-card, .presence-card, .calendar-card');
+    const editableFields = card.querySelectorAll('.editable-field, .editable-select');
+    
+    if (button.innerHTML.includes('edit')) {
+        // Enable editing
+        editableFields.forEach(field => {
+            if (field.tagName === 'SELECT') {
+                field.disabled = false;
+            } else {
+                field.setAttribute('contenteditable', 'true');
+                field.style.background = '#fff9c4';
+            }
+        });
+        button.innerHTML = '<i class="fas fa-save"></i>';
+        button.classList.remove('btn-edit');
+        button.classList.add('btn-save');
+    } else {
+        // Save changes
+        saveCardData(card);
+        editableFields.forEach(field => {
+            if (field.tagName === 'SELECT') {
+                field.disabled = true;
+            } else {
+                field.setAttribute('contenteditable', 'false');
+                field.style.background = 'transparent';
+            }
+        });
+        button.innerHTML = '<i class="fas fa-edit"></i>';
+        button.classList.remove('btn-save');
+        button.classList.add('btn-edit');
+    }
+}
+
+// Save card data to mock data
+function saveCardData(card) {
+    const editableFields = card.querySelectorAll('.editable-field, .editable-select');
+    
+    if (card.classList.contains('user-profile-card')) {
+        const userId = card.getAttribute('data-user-id');
+        const user = mockData.userProfiles.find(u => u.id === userId);
+        
+        editableFields.forEach(field => {
+            const fieldName = field.getAttribute('data-field');
+            const value = field.tagName === 'SELECT' ? field.value : field.textContent.trim();
+            if (user && fieldName) {
+                user[fieldName] = value;
+            }
+        });
+    }
+    // Add similar logic for other card types...
+    
+    // Update the display to reflect changes
+    updateSchedulingForms();
+}
+
+// Add new user
+function addNewUser() {
+    const newUser = {
+        id: Date.now().toString(),
+        name: 'New User',
+        email: 'newuser@company.com',
+        jobTitle: 'Software Engineer',
+        department: 'Engineering',
+        timeZone: 'Pacific Standard Time'
+    };
+    
+    mockData.userProfiles.push(newUser);
+    displayUserProfiles();
+    updateSchedulingForms();
+}
+
+// Delete user
+function deleteUser(userId) {
+    if (confirm('Are you sure you want to delete this user?')) {
+        mockData.userProfiles = mockData.userProfiles.filter(u => u.id !== userId);
+        displayUserProfiles();
+        updateSchedulingForms();
+    }
+}
+
+// Add busy slot
+function addBusySlot(calendarIndex) {
+    const now = new Date();
+    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour later
+    
+    const newSlot = {
+        start: now.toISOString(),
+        end: endTime.toISOString(),
+        status: 'Busy',
+        subject: 'New Meeting'
+    };
+    
+    mockData.calendarAvailability[calendarIndex].busySlots.push(newSlot);
+    displayCalendarAvailability();
+}
+
+// Delete busy slot
+function deleteBusySlot(calendarIndex, slotIndex) {
+    if (confirm('Are you sure you want to delete this busy slot?')) {
+        mockData.calendarAvailability[calendarIndex].busySlots.splice(slotIndex, 1);
+        displayCalendarAvailability();
+    }
+}
+
+// Reset mock data to defaults
+function resetMockData() {
+    if (confirm('Are you sure you want to reset all mock data to defaults?')) {
+        // Reset to original mock data
+        initializeMockData();
+        updateSchedulingForms();
+        alert('Mock data has been reset to defaults.');
+    }
+}
+
+// Generate random mock data
+function generateRandomData() {
+    if (confirm('Are you sure you want to generate random mock data? This will replace current data.')) {
+        // Generate random users
+        const randomNames = ['Alice Johnson', 'Bob Smith', 'Carol Davis', 'David Wilson', 'Eva Brown'];
+        const randomTitles = ['Software Engineer', 'Product Manager', 'UX Designer', 'Engineering Manager', 'HR Business Partner'];
+        const randomDepartments = ['Engineering', 'Product', 'Design', 'Management', 'Human Resources'];
+        const timezones = ['Pacific Standard Time', 'Eastern Standard Time', 'GMT Standard Time', 'Central Standard Time'];
+        
+        mockData.userProfiles = randomNames.map((name, index) => ({
+            id: (index + 1).toString(),
+            name: name,
+            email: name.toLowerCase().replace(' ', '.') + '@company.com',
+            jobTitle: randomTitles[Math.floor(Math.random() * randomTitles.length)],
+            department: randomDepartments[Math.floor(Math.random() * randomDepartments.length)],
+            timeZone: timezones[Math.floor(Math.random() * timezones.length)]
+        }));
+        
+        // Generate random calendar data and other mock data...
+        initializeMockData();
+        updateSchedulingForms();
+        alert('Random mock data has been generated.');
+    }
+}
+
+// Export mock data
+function exportMockData() {
+    const dataStr = JSON.stringify(mockData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'mock-data.json';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+// Update scheduling forms with current mock data
+function updateSchedulingForms() {
+    const emails = mockData.userProfiles.map(user => user.email).join('\n');
+    
+    // Update participant fields
+    const participantFields = [
+        document.getElementById('participants'),
+        document.getElementById('val-participants'),
+        document.getElementById('conflict-participants')
+    ];
+    
+    participantFields.forEach(field => {
+        if (field) {
+            field.value = emails;
+        }
+    });
+}
+
+// Listen for changes in mock data fields
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('editable-field') || e.target.classList.contains('editable-select')) {
+        const card = e.target.closest('.user-profile-card, .working-hours-card, .presence-card, .calendar-card');
+        if (card) {
+            saveCardData(card);
+        }
+    }
 });

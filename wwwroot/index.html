@@ -24,10 +24,20 @@
             <button class="tab-button" onclick="openTab(event, 'analyze-conflicts')">
                 <i class="fas fa-exclamation-triangle"></i> Analyze Conflicts
             </button>
+            <button class="tab-button" onclick="openTab(event, 'mock-data')">
+                <i class="fas fa-database"></i> Mock Data
+            </button>
         </div>
 
         <!-- Find Optimal Slots Tab -->
         <div id="find-slots" class="tab-content active">
+            <div class="tab-description">
+                <h3><i class="fas fa-info-circle"></i> Find Optimal Slots</h3>
+                <p>This tab finds the best available time slots for interviews by analyzing all participants' calendars. 
+                   It considers working hours, existing meetings, and preferences to suggest optimal meeting times. 
+                   Perfect for scheduling interviews when you need to coordinate multiple people's availability.</p>
+            </div>
+            
             <div class="form-section">
                 <h3><i class="fas fa-clock"></i> Schedule Interview</h3>
                 <form id="scheduling-form">
@@ -114,6 +124,13 @@ interviewer@company.com</textarea>
 
         <!-- Validate Request Tab -->
         <div id="validate" class="tab-content">
+            <div class="tab-description">
+                <h3><i class="fas fa-info-circle"></i> Validate Request</h3>
+                <p>This tab validates scheduling requests to ensure they meet business requirements and constraints. 
+                   It checks for proper participant formats, reasonable duration limits, valid date ranges, 
+                   and other business rules. Use this to verify your request is properly formatted before scheduling.</p>
+            </div>
+            
             <div class="form-section">
                 <h3><i class="fas fa-check-circle"></i> Validate Scheduling Request</h3>
                 <form id="validation-form">
@@ -168,6 +185,13 @@ jane.smith@company.com</textarea>
 
         <!-- Analyze Conflicts Tab -->
         <div id="analyze-conflicts" class="tab-content">
+            <div class="tab-description">
+                <h3><i class="fas fa-info-circle"></i> Analyze Conflicts</h3>
+                <p>This tab analyzes potential scheduling conflicts for a specific proposed meeting time. 
+                   It checks if participants have conflicting meetings, are in different time zones, 
+                   or have availability issues. Use this when you have a specific time in mind and want to verify it works for everyone.</p>
+            </div>
+            
             <div class="form-section">
                 <h3><i class="fas fa-exclamation-triangle"></i> Analyze Scheduling Conflicts</h3>
                 <p class="info-text">
@@ -208,6 +232,50 @@ jane.smith@company.com</textarea>
             <div id="conflict-results" class="results-section" style="display: none;">
                 <div id="conflict-status"></div>
                 <div id="conflict-details"></div>
+            </div>
+        </div>
+
+        <!-- Mock Data Tab -->
+        <div id="mock-data" class="tab-content">
+            <div class="tab-description">
+                <h3><i class="fas fa-info-circle"></i> Mock Data Management</h3>
+                <p>This tab allows you to view and modify the mock data used by the bot for testing. 
+                   Change user availability, working hours, and presence status to see how different scenarios 
+                   affect scheduling results. Perfect for testing edge cases and understanding bot behavior.</p>
+            </div>
+            
+            <div class="mock-data-section">
+                <h3><i class="fas fa-users"></i> User Profiles</h3>
+                <div id="user-profiles">
+                    <!-- User profiles will be populated by JavaScript -->
+                </div>
+                
+                <h3><i class="fas fa-calendar"></i> Calendar Availability</h3>
+                <div id="calendar-availability">
+                    <!-- Calendar data will be populated by JavaScript -->
+                </div>
+                
+                <h3><i class="fas fa-clock"></i> Working Hours</h3>
+                <div id="working-hours">
+                    <!-- Working hours will be populated by JavaScript -->
+                </div>
+                
+                <h3><i class="fas fa-signal"></i> Presence Status</h3>
+                <div id="presence-status">
+                    <!-- Presence data will be populated by JavaScript -->
+                </div>
+                
+                <div class="mock-data-actions">
+                    <button type="button" class="btn-primary" onclick="resetMockData()">
+                        <i class="fas fa-refresh"></i> Reset to Default
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="generateRandomData()">
+                        <i class="fas fa-random"></i> Generate Random Data
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="exportMockData()">
+                        <i class="fas fa-download"></i> Export Data
+                    </button>
+                </div>
             </div>
         </div>
 
