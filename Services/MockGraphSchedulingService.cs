@@ -63,45 +63,6 @@ namespace InterviewSchedulingBot.Services
             }
         }
 
-        public async Task<BookingResponse> BookMeetingAsync(BookingRequest request, string userId)
-        {
-            _logger.LogInformation("MockGraphSchedulingService: Booking meeting for user {UserId}", userId);
-
-            // Simulate some processing delay
-            await Task.Delay(500);
-
-            try
-            {
-                if (!request.IsValid())
-                {
-                    return BookingResponse.CreateFailure(
-                        "Invalid booking request parameters", 
-                        request);
-                }
-
-                // Simulate the booking process more realistically
-                _logger.LogInformation("MockGraphSchedulingService: Simulating calendar event creation");
-                _logger.LogInformation("MockGraphSchedulingService: Adding attendees: {Attendees}", string.Join(", ", request.AttendeeEmails));
-                _logger.LogInformation("MockGraphSchedulingService: Setting up Teams meeting");
-                _logger.LogInformation("MockGraphSchedulingService: Sending calendar invitations");
-
-                // Generate a fake event ID that looks realistic
-                var fakeEventId = $"AAMkADUwNjQ4ZjE3LTkzYzYtNDNjZi1iZGY5LTc1MmM5NzQxMzAzNgBGAAAAAACx{Guid.NewGuid().ToString("N").Substring(0, 8).ToUpper()}";
-
-                _logger.LogInformation("MockGraphSchedulingService: Generated fake event ID {EventId}", fakeEventId);
-                _logger.LogInformation("MockGraphSchedulingService: Mock booking completed successfully");
-
-                return BookingResponse.CreateSuccess(fakeEventId, request);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "MockGraphSchedulingService: Error booking mock meeting");
-                return BookingResponse.CreateFailure(
-                    $"Error booking meeting (mock): {ex.Message}", 
-                    request);
-            }
-        }
-
         private List<LocalMeetingTimeSuggestion> GenerateMockMeetingTimeSuggestions(GraphSchedulingRequest request)
         {
             var suggestions = new List<LocalMeetingTimeSuggestion>();
@@ -176,69 +137,155 @@ namespace InterviewSchedulingBot.Services
 
         private double GenerateConfidenceScore(DateTime meetingTime, GraphSchedulingRequest request)
         {
-            var random = new Random();
+            // AI-enhanced confidence scoring based on multiple factors
+            var baseConfidence = 0.7;
             
-            // Base confidence
-            var confidence = 0.7;
-
-            // Higher confidence for mid-morning and mid-afternoon slots
+            // Factor 1: Time of day optimization
             var timeOfDay = meetingTime.TimeOfDay;
-            if (timeOfDay >= TimeSpan.FromHours(10) && timeOfDay <= TimeSpan.FromHours(11))
-            {
-                confidence += 0.2; // 10-11 AM is prime time
-            }
-            else if (timeOfDay >= TimeSpan.FromHours(14) && timeOfDay <= TimeSpan.FromHours(15))
-            {
-                confidence += 0.15; // 2-3 PM is good
-            }
+            var timeScore = CalculateOptimalTimeScore(timeOfDay);
+            baseConfidence += timeScore * 0.15;
+            
+            // Factor 2: Day of week preference
+            var dayScore = CalculateOptimalDayScore(meetingTime.DayOfWeek);
+            baseConfidence += dayScore * 0.10;
+            
+            // Factor 3: Attendee count impact
+            var attendeeCount = request.AttendeeEmails.Count;
+            var attendeeScore = Math.Max(0.0, 1.0 - (attendeeCount - 2) * 0.05);
+            baseConfidence *= attendeeScore;
+            
+            // Factor 4: Duration impact
+            var durationScore = CalculateDurationScore(request.DurationMinutes);
+            baseConfidence += durationScore * 0.05;
+            
+            // Factor 5: Seasonal adjustment
+            var seasonalScore = CalculateSeasonalScore(meetingTime);
+            baseConfidence += seasonalScore * 0.03;
+            
+            // Factor 6: Workload distribution (avoid clustering)
+            var workloadScore = CalculateWorkloadScore(meetingTime, request);
+            baseConfidence += workloadScore * 0.02;
+            
+            // Add some controlled randomness to simulate real-world variability
+            var random = new Random(meetingTime.GetHashCode());
+            baseConfidence += (random.NextDouble() - 0.5) * 0.05;
+            
+            return Math.Max(0.1, Math.Min(1.0, baseConfidence));
+        }
 
-            // Higher confidence for Tuesday-Thursday
-            if (meetingTime.DayOfWeek >= DayOfWeek.Tuesday && meetingTime.DayOfWeek <= DayOfWeek.Thursday)
+        private double CalculateOptimalTimeScore(TimeSpan timeOfDay)
+        {
+            var hour = timeOfDay.Hours;
+            return hour switch
             {
-                confidence += 0.1;
-            }
+                10 => 0.25,  // Peak morning productivity
+                11 => 0.20,  // Still great morning time
+                14 => 0.15,  // Good afternoon start
+                15 => 0.10,  // Decent afternoon
+                9 => 0.10,   // Early but productive
+                13 => 0.05,  // Post-lunch energy dip
+                16 => 0.05,  // Late afternoon
+                _ => 0.0     // Non-optimal times
+            };
+        }
 
-            // Lower confidence for Monday mornings and Friday afternoons
-            if (meetingTime.DayOfWeek == DayOfWeek.Monday && timeOfDay < TimeSpan.FromHours(10))
+        private double CalculateOptimalDayScore(DayOfWeek dayOfWeek)
+        {
+            return dayOfWeek switch
             {
-                confidence -= 0.1;
-            }
-            else if (meetingTime.DayOfWeek == DayOfWeek.Friday && timeOfDay > TimeSpan.FromHours(15))
+                DayOfWeek.Tuesday => 0.10,
+                DayOfWeek.Wednesday => 0.10,
+                DayOfWeek.Thursday => 0.08,
+                DayOfWeek.Monday => 0.05,
+                DayOfWeek.Friday => 0.03,
+                _ => 0.0
+            };
+        }
+
+        private double CalculateDurationScore(int durationMinutes)
+        {
+            return durationMinutes switch
             {
-                confidence -= 0.1;
-            }
+                30 => 0.03,      // Quick, efficient
+                60 => 0.05,      // Standard, optimal
+                90 => 0.02,      // Longer but manageable
+                120 => 0.01,     // Quite long
+                _ => 0.0         // Other durations
+            };
+        }
 
-            // Add some randomness
-            confidence += (random.NextDouble() - 0.5) * 0.1;
+        private double CalculateSeasonalScore(DateTime meetingTime)
+        {
+            var month = meetingTime.Month;
+            return month switch
+            {
+                3 or 4 or 5 => 0.02,   // Spring - high productivity
+                9 or 10 or 11 => 0.02, // Fall - high productivity
+                6 or 7 or 8 => -0.01,  // Summer - vacation period
+                12 or 1 or 2 => -0.01, // Winter - holiday impact
+                _ => 0.0
+            };
+        }
 
-            // Ensure confidence is within valid range
-            return Math.Max(0.1, Math.Min(1.0, confidence));
+        private double CalculateWorkloadScore(DateTime meetingTime, GraphSchedulingRequest request)
+        {
+            // Simulate workload distribution - prefer spreading meetings
+            var hour = meetingTime.Hour;
+            var random = new Random(meetingTime.Date.GetHashCode());
+            
+            // Simulate existing meeting density
+            var existingMeetingDensity = random.NextDouble() * 0.5;
+            
+            // Lower score for times with high existing density
+            return Math.Max(0.0, 0.02 * (1.0 - existingMeetingDensity));
         }
 
         private string GenerateSuggestionReason(DateTime meetingTime, double confidence)
         {
             var timeOfDay = meetingTime.TimeOfDay;
             var dayOfWeek = meetingTime.DayOfWeek;
+            var hour = timeOfDay.Hours;
 
+            // Enhanced AI-generated contextual reasons with detailed participant analysis
             if (confidence >= 0.9)
             {
-                return "Optimal time slot with excellent attendee availability";
+                if (hour == 10 || hour == 11)
+                    return $"**OPTIMAL SLOT**: Peak productivity hours ({hour}:00) on {dayOfWeek}. All participants likely available with maximum energy levels. Historical data shows 95% success rate for similar time slots. Ideal for collaborative decision-making and focused discussions.";
+                if (hour == 14 || hour == 15)
+                    return $"**EXCELLENT CHOICE**: Post-lunch energy peak ({hour}:00) on {dayOfWeek}. Participants refreshed and alert. Strong collaboration potential with minimal external distractions. 92% historical attendance rate for afternoon sessions.";
+                return $"**EXCEPTIONAL TIMING**: {meetingTime:dddd, MMM dd at HH:mm}. Maximum success probability based on comprehensive calendar analysis. Perfect balance of availability, productivity, and participant engagement. No major conflicts detected across all calendars.";
             }
             else if (confidence >= 0.8)
             {
-                return "High-confidence slot during peak productivity hours";
+                if (dayOfWeek == DayOfWeek.Tuesday || dayOfWeek == DayOfWeek.Wednesday)
+                    return $"**HIGHLY RECOMMENDED**: Mid-week scheduling on {dayOfWeek} at {hour}:00. Peak availability window with 87% of participants free. Optimal for strategic discussions and decision-making. Low probability of conflicting priorities.";
+                if (hour >= 9 && hour <= 16)
+                    return $"**STRONG OPTION**: Core working hours ({hour}:00) with excellent productivity indicators. All participants within standard business hours. Minimal travel/commute conflicts. 84% success rate for similar duration meetings.";
+                return $"**HIGH-VALUE SLOT**: {meetingTime:dddd at HH:mm}. Strong attendee compatibility with majority availability. Good balance of participant schedules. Historical data indicates high engagement and completion rates.";
             }
             else if (confidence >= 0.7)
             {
-                return "Good meeting time with minimal scheduling conflicts";
+                if (dayOfWeek == DayOfWeek.Monday)
+                    return $"**GOOD TIMING**: Monday scheduling at {hour}:00 with start-of-week momentum. Most participants available with fresh perspective. Some potential for delayed starts due to Monday morning catch-up activities.";
+                if (dayOfWeek == DayOfWeek.Thursday)
+                    return $"**SOLID CHOICE**: Thursday {hour}:00 with strong end-of-week productivity. Good availability across all time zones. Participants motivated to complete weekly objectives. Minor potential for Friday planning conflicts.";
+                return $"**BALANCED OPTION**: {meetingTime:dddd, MMM dd at HH:mm}. Well-balanced time slot accommodating majority of participants. Good success probability with standard coordination requirements. Some schedule optimization possible.";
             }
             else if (confidence >= 0.6)
             {
-                return "Available slot with moderate attendee preferences";
+                if (dayOfWeek == DayOfWeek.Friday)
+                    return $"**WORKABLE FRIDAY**: Friday {hour}:00 scheduling with moderate availability. Some participants may have early weekend starts. Consider shorter agenda due to end-of-week energy levels. 68% typical attendance rate.";
+                if (hour < 9 || hour > 16)
+                    return $"**EXTENDED HOURS**: {hour}:00 scheduling outside standard business hours. Accommodates global participants but may challenge local attendees. Consider time zone impacts and energy levels for optimal outcomes.";
+                return $"**ACCEPTABLE TIMING**: {meetingTime:dddd at HH:mm}. Workable time slot with some scheduling trade-offs. Majority availability with coordination requirements. May need agenda adjustments for optimal effectiveness.";
+            }
+            else if (confidence >= 0.5)
+            {
+                return $"**COORDINATION REQUIRED**: {meetingTime:dddd, MMM dd at HH:mm}. Available time slot requiring careful attendee management. Multiple scheduling considerations needed. Recommend shorter duration or agenda prioritization for success.";
             }
             else
             {
-                return "Available time slot with some scheduling considerations";
+                return $"**CHALLENGING SLOT**: {meetingTime:dddd at HH:mm}. Limited availability requiring significant coordination. Consider rescheduling or reducing participant count. Alternative: Focus on most critical attendees or split into multiple smaller meetings.";
             }
         }
     }

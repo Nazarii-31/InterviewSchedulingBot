@@ -38,6 +38,33 @@ namespace InterviewSchedulingBot.Models
             }
         }
 
+        public string FormattedSuggestionsWithoutBooking
+        {
+            get
+            {
+                if (!HasSuggestions)
+                    return "No meeting time suggestions available.";
+
+                var suggestions = MeetingTimeSuggestions.Take(10).Select((suggestion, index) => 
+                {
+                    if (suggestion.MeetingTimeSlot?.Start?.DateTime == null || 
+                        suggestion.MeetingTimeSlot?.End?.DateTime == null)
+                        return $"**Option {index + 1}**: Invalid meeting time data";
+                        
+                    var startTime = DateTime.Parse(suggestion.MeetingTimeSlot.Start.DateTime);
+                    var endTime = DateTime.Parse(suggestion.MeetingTimeSlot.End.DateTime);
+                    var confidence = suggestion.Confidence > 0 ? 
+                        $" (Confidence: {suggestion.Confidence * 100:F0}%)" : "";
+                    var reason = !string.IsNullOrEmpty(suggestion.SuggestionReason) ? 
+                        $"\n   📋 {suggestion.SuggestionReason}" : "";
+                    
+                    return $"**Option {index + 1}**: {startTime:dddd, MMM dd} from {startTime:HH:mm} to {endTime:HH:mm}{confidence}{reason}";
+                });
+
+                return string.Join("\n\n", suggestions);
+            }
+        }
+
         public string FormattedSuggestionsWithBookingText
         {
             get

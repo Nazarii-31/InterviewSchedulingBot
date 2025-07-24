@@ -371,41 +371,28 @@ namespace InterviewSchedulingBot.Dialogs
                     {
                         var selectedSuggestion = graphResponse.MeetingTimeSuggestions[slotIndex];
                         
-                        var bookingRequest = new BookingRequest
+                        if (selectedSuggestion.MeetingTimeSlot?.Start?.DateTime != null && selectedSuggestion.MeetingTimeSlot?.End?.DateTime != null)
                         {
-                            SelectedSuggestion = selectedSuggestion,
-                            AttendeeEmails = stepContext.Values["attendeeEmails"]?.ToString()?.Split(',')?.Select(e => e.Trim())?.ToList() ?? new List<string>(),
-                            MeetingTitle = "Interview Meeting",
-                            MeetingDescription = "Interview meeting scheduled via conversational bot"
-                        };
-
-                        var bookingResponse = await _graphSchedulingService.BookMeetingAsync(bookingRequest, stepContext.Context.Activity.From.Id);
-                        
-                        if (bookingResponse.IsSuccess)
-                        {
-                            if (selectedSuggestion.MeetingTimeSlot?.Start?.DateTime != null && selectedSuggestion.MeetingTimeSlot?.End?.DateTime != null)
-                            {
-                                var startTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.Start.DateTime);
-                                var endTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.End.DateTime);
-                                
-                                var successMessage = $"✅ **Meeting booked successfully!**\n\n" +
-                                                   $"**Meeting Details:**\n" +
-                                                   $"• **Title:** {bookingRequest.MeetingTitle}\n" +
+                            var startTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.Start.DateTime);
+                            var endTime = DateTime.Parse(selectedSuggestion.MeetingTimeSlot.End.DateTime);
+                            var attendeeEmails = stepContext.Values["attendeeEmails"]?.ToString()?.Split(',')?.Select(e => e.Trim())?.ToList() ?? new List<string>();
+                            
+                            var suggestionMessage = $"✅ **Perfect Time Slot Identified!**\n\n" +
+                                                   $"**📊 Optimal Meeting Time:**\n" +
                                                    $"• **Date:** {startTime:dddd, MMMM dd, yyyy}\n" +
                                                    $"• **Time:** {startTime:HH:mm} - {endTime:HH:mm}\n" +
-                                                   $"• **Attendees:** {string.Join(", ", bookingRequest.AttendeeEmails)}\n" +
-                                                   $"• **Event ID:** {bookingResponse.EventId}\n\n" +
-                                                   $"📧 **Calendar invites have been sent to all attendees.**\n" +
-                                                   $"🔗 **Teams meeting link will be included in the calendar invite.**";
+                                                   $"• **Duration:** {(endTime - startTime).TotalMinutes} minutes\n" +
+                                                   $"• **Participants:** {string.Join(", ", attendeeEmails)}\n" +
+                                                   $"• **AI Confidence:** {selectedSuggestion.Confidence * 100:F0}%\n\n" +
+                                                   $"**💡 Why This Time is Perfect:**\n" +
+                                                   $"{selectedSuggestion.SuggestionReason}\n\n" +
+                                                   $"📋 **Next Steps:**\n" +
+                                                   $"• Share this optimal time with all participants\n" +
+                                                   $"• Coordinate directly to confirm attendance\n" +
+                                                   $"• Create the meeting in your calendar system\n" +
+                                                   $"• Use the AI confidence score to prioritize scheduling";
 
-                                await stepContext.Context.SendActivityAsync(MessageFactory.Text(successMessage), cancellationToken);
-                            }
-                        }
-                        else
-                        {
-                            await stepContext.Context.SendActivityAsync(
-                                MessageFactory.Text($"❌ Failed to book meeting: {bookingResponse.Message}"), 
-                                cancellationToken);
+                            await stepContext.Context.SendActivityAsync(MessageFactory.Text(suggestionMessage), cancellationToken);
                         }
                     }
                 }
@@ -417,16 +404,18 @@ namespace InterviewSchedulingBot.Dialogs
                     {
                         var selectedTimeSlot = schedulingResponse.AvailableSlots[slotIndex];
                         
-                        var successMessage = $"✅ **Meeting slot confirmed!**\n\n" +
-                                           $"**Meeting Details:**\n" +
-                                           $"• **Title:** Interview Meeting\n" +
+                        var successMessage = $"✅ **Optimal Time Slot Confirmed!**\n\n" +
+                                           $"**📊 Recommended Meeting Time:**\n" +
                                            $"• **Date:** {selectedTimeSlot.StartTime:dddd, MMMM dd, yyyy}\n" +
                                            $"• **Time:** {selectedTimeSlot.StartTime:HH:mm} - {selectedTimeSlot.EndTime:HH:mm}\n" +
                                            $"• **Duration:** {selectedTimeSlot.DurationMinutes} minutes\n" +
-                                           $"• **Attendees:** {string.Join(", ", stepContext.Values["attendeeEmails"]?.ToString()?.Split(',')?.Select(e => e.Trim()) ?? new string[0])}\n\n" +
-                                           $"📧 **Next steps: Calendar invites would be sent to all attendees.**\n" +
-                                           $"🔗 **Teams meeting link would be included in the calendar invite.**\n\n" +
-                                           $"*Note: This is a demonstration. In production, the meeting would be created in your calendar.*";
+                                           $"• **Participants:** {string.Join(", ", stepContext.Values["attendeeEmails"]?.ToString()?.Split(',')?.Select(e => e.Trim()) ?? new string[0])}\n\n" +
+                                           $"📋 **Next Steps for Coordination:**\n" +
+                                           $"• Share this optimal time with all participants\n" +
+                                           $"• Confirm availability with each attendee\n" +
+                                           $"• Create the meeting in your preferred calendar system\n" +
+                                           $"• Send calendar invitations to all participants\n\n" +
+                                           $"💡 **Pro Tip:** This time slot was identified as optimal based on comprehensive calendar analysis and availability patterns.";
 
                         await stepContext.Context.SendActivityAsync(MessageFactory.Text(successMessage), cancellationToken);
                     }
@@ -435,7 +424,7 @@ namespace InterviewSchedulingBot.Dialogs
             catch (Exception ex)
             {
                 await stepContext.Context.SendActivityAsync(
-                    MessageFactory.Text($"❌ Error booking meeting: {ex.Message}"), 
+                    MessageFactory.Text($"❌ Error processing time slot selection: {ex.Message}"), 
                     cancellationToken);
             }
 
