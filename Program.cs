@@ -69,7 +69,18 @@ builder.Services.AddSingleton<ICoreSchedulingLogic, CoreSchedulingLogic>();
 
 // === INTEGRATION LAYER SERVICES ===
 // Register Teams integration service (includes calendar access through Teams API)
-builder.Services.AddSingleton<ITeamsIntegrationService, TeamsIntegrationService>();
+// Use mock service if configured for testing, otherwise use real service
+var useMockTeamsService = builder.Configuration.GetValue<bool>("TeamsIntegration:UseMockService", false);
+if (useMockTeamsService)
+{
+    builder.Services.AddSingleton<ITeamsIntegrationService, InterviewSchedulingBot.Services.Mock.MockTeamsIntegrationService>();
+    Console.WriteLine("✓ Using MockTeamsIntegrationService for testing (no Teams deployment required)");
+}
+else
+{
+    builder.Services.AddSingleton<ITeamsIntegrationService, TeamsIntegrationService>();
+    Console.WriteLine("✓ Using TeamsIntegrationService (requires Teams deployment)");
+}
 
 // === BUSINESS LAYER SERVICES ===
 // Register pure business logic service

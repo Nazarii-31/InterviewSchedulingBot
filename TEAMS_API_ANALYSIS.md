@@ -170,9 +170,78 @@ POST https://graph.microsoft.com/v1.0/me/calendar/getSchedule
 - Handle sensitive calendar information appropriately
 - Comply with organizational data policies
 
+## 🧪 Testing with Mock Data
+
+### Mock Data Requirements
+For comprehensive testing without server deployment, the following mock data structures are needed:
+
+#### Calendar Availability Mock Response
+```json
+{
+  "value": [
+    {
+      "schedules": ["user1@contoso.com"],
+      "freeBusyViewType": "detailed",
+      "availabilityView": ["0","0","0","0","1","1","1","1","0","0"],
+      "workingHours": {
+        "daysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+        "startTime": "08:00:00.0000000",
+        "endTime": "17:00:00.0000000",
+        "timeZone": "Pacific Standard Time"
+      }
+    }
+  ]
+}
+```
+
+#### User Presence Mock Response
+```json
+{
+  "availability": "Available",
+  "activity": "Available", 
+  "lastModifiedDateTime": "2024-01-15T10:30:00Z"
+}
+```
+
+#### Working Hours Mock Response
+```json
+{
+  "timeZone": "Pacific Standard Time",
+  "workingHours": {
+    "daysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    "startTime": "09:00:00.0000000",
+    "endTime": "17:00:00.0000000"
+  }
+}
+```
+
+### Additional Key Endpoints for Comprehensive Coverage
+
+#### **Teams Channel Information**
+- **Endpoint**: `GET /teams/{team-id}/channels`
+- **Purpose**: Get available channels for scheduling context
+- **Use Case**: Channel-specific interview scheduling
+
+#### **User Manager Information**
+- **Endpoint**: `GET /me/manager`
+- **Purpose**: Get reporting structure for interview approval workflows
+- **Use Case**: Auto-include managers in interview scheduling
+
+#### **Out of Office Information**
+- **Endpoint**: `GET /me/mailboxSettings/automaticRepliesSetting`
+- **Purpose**: Check if users are out of office during proposed times
+- **Use Case**: Avoid scheduling during known absence periods
+
+#### **Time Zone Conversion**
+- **Endpoint**: `GET /me/outlook/supportedTimeZones`
+- **Purpose**: Handle multi-timezone scheduling scenarios
+- **Use Case**: Global team interview coordination
+
 ## 📚 Resources
 
 - [Teams Bot Framework Documentation](https://docs.microsoft.com/en-us/microsoftteams/platform/bots/what-are-bots)
 - [Microsoft Graph Calendar API](https://docs.microsoft.com/en-us/graph/api/resources/calendar)
 - [Teams App Manifest Schema](https://docs.microsoft.com/en-us/microsoftteams/platform/resources/schema/manifest-schema)
 - [Graph API Permissions Reference](https://docs.microsoft.com/en-us/graph/permissions-reference)
+- [Microsoft Graph API Explorer](https://developer.microsoft.com/en-us/graph/graph-explorer)
+- [Teams Bot Samples](https://github.com/Microsoft/BotBuilder-Samples)

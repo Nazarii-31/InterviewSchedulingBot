@@ -83,6 +83,11 @@ namespace InterviewSchedulingBot.Tests
             }
 
             Console.WriteLine("\n🎉 All AI features tested successfully!");
+            
+            // Also run Teams integration tests
+            Console.WriteLine("\n" + new string('=', 60));
+            await TeamsIntegrationMockTest.RunComprehensiveTeamsIntegrationTest();
+            
             Console.WriteLine("\nNext steps:");
             Console.WriteLine("1. Run 'dotnet run' to start the bot");
             Console.WriteLine("2. Use ngrok to expose the bot to Teams");
