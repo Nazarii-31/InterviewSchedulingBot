@@ -4,11 +4,41 @@ using Microsoft.Bot.Connector.Authentication;
 using InterviewSchedulingBot.Bots;
 using InterviewSchedulingBot.Services;
 using InterviewSchedulingBot.Interfaces;
+using InterviewSchedulingBot.Interfaces.Integration;
+using InterviewSchedulingBot.Interfaces.Business;
+using InterviewSchedulingBot.Services.Integration;
+using InterviewSchedulingBot.Services.Business;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers().AddNewtonsoftJson();
+
+// Add Swagger services
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo 
+    { 
+        Title = "Interview Scheduling Bot API", 
+        Version = "v1",
+        Description = "RESTful API for interview scheduling operations with clear separation between business and integration layers",
+        Contact = new OpenApiContact
+        {
+            Name = "Interview Scheduling Bot",
+            Email = "support@interviewbot.com"
+        }
+    });
+    
+    // Include XML comments for better documentation
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+    {
+        c.IncludeXmlComments(xmlPath);
+    }
+});
 
 // Create the Bot Framework Authentication to be used with the Bot Adapter.
 builder.Services.AddSingleton<BotFrameworkAuthentication, ConfigurationBotFrameworkAuthentication>();
@@ -36,6 +66,17 @@ builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
 
 // Register the Core Scheduling Logic
 builder.Services.AddSingleton<ICoreSchedulingLogic, CoreSchedulingLogic>();
+
+// === INTEGRATION LAYER SERVICES ===
+// Register Teams integration service
+builder.Services.AddSingleton<ITeamsIntegrationService, TeamsIntegrationService>();
+
+// Register Calendar integration service
+builder.Services.AddSingleton<ICalendarIntegrationService, CalendarIntegrationService>();
+
+// === BUSINESS LAYER SERVICES ===
+// Register pure business logic service
+builder.Services.AddSingleton<ISchedulingBusinessService, SchedulingBusinessService>();
 
 // Register the AI Scheduling Services (Hybrid Approach) - Unified Service
 builder.Services.AddSingleton<ISchedulingHistoryRepository, InMemorySchedulingHistoryRepository>();
@@ -99,6 +140,17 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
+else
+{
+    // Enable Swagger in development
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Interview Scheduling Bot API v1");
+        c.RoutePrefix = "swagger"; // Make Swagger available at /swagger
+        c.DocumentTitle = "Interview Scheduling Bot API Documentation";
+    });
+}
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
@@ -106,5 +158,13 @@ app.UseRouting();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Log architectural information
+var architectureLogger = app.Services.GetRequiredService<ILogger<Program>>();
+architectureLogger.LogInformation("🏗️  Interview Scheduling Bot - Layered Architecture");
+architectureLogger.LogInformation("📋 Integration Layer: Teams, Calendar, External AI services");
+architectureLogger.LogInformation("💼 Business Layer: Pure scheduling logic and business rules");
+architectureLogger.LogInformation("🌐 API Layer: RESTful endpoints with Swagger documentation");
+architectureLogger.LogInformation("📚 Swagger Documentation available at: /swagger");
 
 app.Run();
