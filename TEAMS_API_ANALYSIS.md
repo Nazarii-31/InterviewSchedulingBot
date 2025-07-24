@@ -67,15 +67,6 @@ POST https://graph.microsoft.com/v1.0/me/calendar/getSchedule
 - **Purpose**: Get detailed user information including email, timezone, manager
 - **Properties**: `id`, `mail`, `displayName`, `mailboxSettings`, `manager`
 
-##### **Get Team Members**
-- **Endpoint**: `GET /teams/{team-id}/members`
-- **Purpose**: Get all members of a team for group scheduling
-- **Use Case**: Schedule interviews with multiple team members
-
-##### **Get User's Manager**
-- **Endpoint**: `GET /me/manager`
-- **Purpose**: Get manager information for approval workflows
-
 ##### **Find People**
 - **Endpoint**: `GET /me/people`
 - **Purpose**: Search for people in organization
@@ -148,16 +139,14 @@ POST https://graph.microsoft.com/v1.0/me/calendar/getSchedule
 ### Priority 2: Enhanced Functionality
 
 5. **`GET /me/calendar/events`** - Detailed calendar analysis
-6. **`GET /teams/{team-id}/members`** - Team member discovery
-7. **`POST /communications/getPresencesByUserId`** - Batch presence checking
-8. **`GET /me/people`** - Organization people search
+6. **`POST /communications/getPresencesByUserId`** - Batch presence checking
+7. **`GET /me/people`** - Organization people search
 
 ### Priority 3: Advanced Features
 
-9. **`GET /me/manager`** - Approval workflow support
-10. **Teams Messaging Extensions** - Rich search interface
-11. **Teams Task Modules** - Advanced scheduling UI
-12. **Adaptive Cards** - Interactive scheduling interface
+8. **Teams Messaging Extensions** - Rich search interface
+9. **Teams Task Modules** - Advanced scheduling UI
+10. **Adaptive Cards** - Interactive scheduling interface
 
 ## 🔧 Implementation Considerations
 

@@ -213,42 +213,7 @@ namespace InterviewSchedulingBot.Services.Integration
             }
         }
 
-        /// <summary>
-        /// Get team members for group scheduling scenarios
-        /// Useful for scheduling interviews with multiple team members
-        /// </summary>
-        /// <param name="turnContext">Bot turn context</param>
-        /// <param name="teamId">Team ID to get members from</param>
-        /// <returns>List of team members</returns>
-        public async Task<List<InterviewTeamMember>> GetTeamMembersAsync(ITurnContext turnContext, string teamId)
-        {
-            _logger.LogInformation("Getting team members for team {TeamId}", teamId);
-            
-            try
-            {
-                var userInfo = await GetUserInfoAsync(turnContext);
-                var authResult = await HandleAuthenticationAsync(turnContext, userInfo.Id);
-                
-                if (!authResult.IsAuthenticated || string.IsNullOrEmpty(authResult.AccessToken))
-                {
-                    throw new InvalidOperationException("User is not authenticated");
-                }
 
-                var graphClient = GetGraphServiceClient(authResult.AccessToken);
-                
-                // For now, return empty list
-                // Implementation would use: await graphClient.Teams[teamId].Members.GetAsync();
-                var teamMembers = new List<InterviewTeamMember>();
-
-                _logger.LogInformation("Retrieved {MemberCount} team members", teamMembers.Count);
-                return teamMembers;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error getting team members for team {TeamId}", teamId);
-                throw new InvalidOperationException("Failed to retrieve team members", ex);
-            }
-        }
 
         /// <summary>
         /// Get user presence information for real-time availability

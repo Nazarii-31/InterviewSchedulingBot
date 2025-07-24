@@ -65,14 +65,7 @@ namespace InterviewSchedulingBot.Interfaces.Integration
         /// <returns>Working hours configuration</returns>
         Task<WorkingHours> GetUserWorkingHoursAsync(ITurnContext turnContext, string userEmail);
 
-        /// <summary>
-        /// Get team members for group scheduling scenarios
-        /// Useful for scheduling interviews with multiple team members
-        /// </summary>
-        /// <param name="turnContext">Bot turn context</param>
-        /// <param name="teamId">Team ID to get members from</param>
-        /// <returns>List of team members with their information</returns>
-        Task<List<InterviewTeamMember>> GetTeamMembersAsync(ITurnContext turnContext, string teamId);
+
 
         /// <summary>
         /// Get user presence information for real-time availability
@@ -130,13 +123,7 @@ namespace InterviewSchedulingBot.Interfaces.Integration
         public string EndTime { get; set; } = string.Empty;
     }
 
-    public class InterviewTeamMember
-    {
-        public string Id { get; set; } = string.Empty;
-        public string DisplayName { get; set; } = string.Empty;
-        public string Email { get; set; } = string.Empty;
-        public List<string> Roles { get; set; } = new();
-    }
+
 
     public class UserPresence
     {
