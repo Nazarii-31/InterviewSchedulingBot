@@ -125,22 +125,7 @@ if (!configValidator.ValidateAuthenticationConfiguration())
     logger.LogWarning("Authentication configuration is incomplete. The bot will start but authentication features may not work properly.");
 }
 
-// Run hybrid AI scheduling test in development environment
-if (app.Environment.IsDevelopment())
-{
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogInformation("Running Hybrid AI Scheduling functionality test...");
-    
-    try
-    {
-        await InterviewSchedulingBot.Tests.HybridAISchedulingTest.RunHybridAISchedulingTest();
-        logger.LogInformation("✓ Hybrid AI Scheduling test completed successfully");
-    }
-    catch (Exception ex)
-    {
-        logger.LogError(ex, "Hybrid AI Scheduling test failed");
-    }
-}
+
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
