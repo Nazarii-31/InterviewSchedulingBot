@@ -118,10 +118,45 @@ The bot includes automatic configuration validation at startup. If any required 
 
 ## Architecture
 
-- **TeamsActivityHandler**: Manages bot interactions and authentication flow
-- **AuthenticationService**: Handles OAuth 2.0 flow and token management
-- **GraphCalendarService**: Interfaces with Microsoft Graph API for calendar operations
-- **SchedulingRequest**: Data model for interview scheduling requests
+The bot follows a layered architecture with clear separation of concerns:
+
+### Integration Layer
+- **TeamsIntegrationService**: Microsoft Teams bot interactions and messaging
+- **CalendarIntegrationService**: Calendar operations abstraction (Microsoft Graph API)
+- **ExternalAIService**: External AI providers abstraction
+
+### Business Layer
+- **SchedulingBusinessService**: Pure business logic for interview scheduling
+- **Business Rules**: Validation, conflict analysis, and optimization algorithms
+- **Interview Logic**: Type-specific optimizations (Technical, Panel, Final, etc.)
+
+### API Layer
+- **SchedulingApiController**: RESTful API with Swagger documentation
+- **Clear Interfaces**: Communication between business and integration layers
+- **Error Handling**: Comprehensive validation and error responses
+
+For detailed architectural information, see [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## API Documentation
+
+The bot now includes a comprehensive RESTful API with Swagger documentation:
+
+- **Swagger UI**: Available at `/swagger` (development environment)
+- **OpenAPI Specification**: Complete API documentation
+- **Interactive Testing**: Test API endpoints directly from Swagger UI
+
+### Key API Endpoints
+- `POST /api/scheduling/find-optimal-slots` - Find optimal interview time slots
+- `POST /api/scheduling/validate` - Validate scheduling requirements  
+- `POST /api/scheduling/analyze-conflicts` - Analyze scheduling conflicts
+
+## External AI Integration
+
+The bot uses external AI APIs for intelligent scheduling:
+- **No Built-in LLMs**: Uses external providers like Azure OpenAI
+- **Natural Language Processing**: Extract requirements from conversational input
+- **Intelligent Ranking**: AI-powered meeting time suggestions
+- **Pattern Analysis**: Learn from historical scheduling data
 
 ## Security
 
