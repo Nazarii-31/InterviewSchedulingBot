@@ -43,7 +43,7 @@ namespace InterviewSchedulingBot.Interfaces.Integration
 
         /// <summary>
         /// Get calendar availability through Teams built-in calendar access
-        /// Teams provides direct access to user's Outlook calendar data
+        /// Teams provides direct access to user's Outlook calendar data via Microsoft Graph
         /// </summary>
         /// <param name="turnContext">Bot turn context</param>
         /// <param name="userEmails">List of user emails to check availability</param>
@@ -55,6 +55,43 @@ namespace InterviewSchedulingBot.Interfaces.Integration
             List<string> userEmails, 
             DateTime startTime, 
             DateTime endTime);
+
+        /// <summary>
+        /// Get user's working hours and time zone preferences
+        /// Essential for respecting user availability preferences when scheduling
+        /// </summary>
+        /// <param name="turnContext">Bot turn context</param>
+        /// <param name="userEmail">User email to get working hours for</param>
+        /// <returns>Working hours configuration</returns>
+        Task<WorkingHours> GetUserWorkingHoursAsync(ITurnContext turnContext, string userEmail);
+
+        /// <summary>
+        /// Get team members for group scheduling scenarios
+        /// Useful for scheduling interviews with multiple team members
+        /// </summary>
+        /// <param name="turnContext">Bot turn context</param>
+        /// <param name="teamId">Team ID to get members from</param>
+        /// <returns>List of team members with their information</returns>
+        Task<List<InterviewTeamMember>> GetTeamMembersAsync(ITurnContext turnContext, string teamId);
+
+        /// <summary>
+        /// Get user presence information for real-time availability
+        /// Helps determine if users are currently available for immediate scheduling
+        /// </summary>
+        /// <param name="turnContext">Bot turn context</param>
+        /// <param name="userEmails">List of user emails to check presence</param>
+        /// <returns>Dictionary of user email to presence information</returns>
+        Task<Dictionary<string, UserPresence>> GetUsersPresenceAsync(ITurnContext turnContext, List<string> userEmails);
+
+        /// <summary>
+        /// Search for people in the organization
+        /// Useful for finding interview participants and stakeholders
+        /// </summary>
+        /// <param name="turnContext">Bot turn context</param>
+        /// <param name="searchQuery">Search query (name, email, etc.)</param>
+        /// <param name="maxResults">Maximum number of results to return</param>
+        /// <returns>List of people matching the search criteria</returns>
+        Task<List<PersonInfo>> SearchPeopleAsync(ITurnContext turnContext, string searchQuery, int maxResults = 10);
     }
 
     public class TeamsUserInfo
@@ -63,6 +100,8 @@ namespace InterviewSchedulingBot.Interfaces.Integration
         public string Name { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string TenantId { get; set; } = string.Empty;
+        public string TeamId { get; set; } = string.Empty;
+        public string ChannelId { get; set; } = string.Empty;
     }
 
     public class AuthenticationResult
@@ -81,5 +120,37 @@ namespace InterviewSchedulingBot.Interfaces.Integration
         public List<string> AttendeeEmails { get; set; } = new();
         public string? Description { get; set; }
         public string OrganizerEmail { get; set; } = string.Empty;
+    }
+
+    public class WorkingHours
+    {
+        public string TimeZone { get; set; } = string.Empty;
+        public List<string> DaysOfWeek { get; set; } = new();
+        public string StartTime { get; set; } = string.Empty;
+        public string EndTime { get; set; } = string.Empty;
+    }
+
+    public class InterviewTeamMember
+    {
+        public string Id { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public List<string> Roles { get; set; } = new();
+    }
+
+    public class UserPresence
+    {
+        public string Availability { get; set; } = string.Empty;
+        public string Activity { get; set; } = string.Empty;
+        public string LastModifiedDateTime { get; set; } = string.Empty;
+    }
+
+    public class PersonInfo
+    {
+        public string Id { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public List<string> EmailAddresses { get; set; } = new();
+        public string JobTitle { get; set; } = string.Empty;
+        public string Department { get; set; } = string.Empty;
     }
 }
