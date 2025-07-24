@@ -68,11 +68,8 @@ builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
 builder.Services.AddSingleton<ICoreSchedulingLogic, CoreSchedulingLogic>();
 
 // === INTEGRATION LAYER SERVICES ===
-// Register Teams integration service
+// Register Teams integration service (includes calendar access through Teams API)
 builder.Services.AddSingleton<ITeamsIntegrationService, TeamsIntegrationService>();
-
-// Register Calendar integration service
-builder.Services.AddSingleton<ICalendarIntegrationService, CalendarIntegrationService>();
 
 // === BUSINESS LAYER SERVICES ===
 // Register pure business logic service

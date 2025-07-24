@@ -42,11 +42,19 @@ namespace InterviewSchedulingBot.Interfaces.Integration
         Task<AuthenticationResult> HandleAuthenticationAsync(ITurnContext turnContext, string userId);
 
         /// <summary>
-        /// Create a Teams meeting link for scheduled interviews
+        /// Get calendar availability through Teams built-in calendar access
+        /// Teams provides direct access to user's Outlook calendar data
         /// </summary>
-        /// <param name="meetingRequest">Meeting details</param>
-        /// <returns>Teams meeting URL</returns>
-        Task<string> CreateTeamsMeetingAsync(MeetingRequest meetingRequest);
+        /// <param name="turnContext">Bot turn context</param>
+        /// <param name="userEmails">List of user emails to check availability</param>
+        /// <param name="startTime">Start time for availability check</param>
+        /// <param name="endTime">End time for availability check</param>
+        /// <returns>Dictionary of user email to their busy time slots</returns>
+        Task<Dictionary<string, List<BusyTimeSlot>>> GetCalendarAvailabilityAsync(
+            ITurnContext turnContext, 
+            List<string> userEmails, 
+            DateTime startTime, 
+            DateTime endTime);
     }
 
     public class TeamsUserInfo

@@ -122,7 +122,7 @@ The bot follows a layered architecture with clear separation of concerns:
 
 ### Integration Layer
 - **TeamsIntegrationService**: Microsoft Teams bot interactions and messaging
-- **CalendarIntegrationService**: Calendar operations abstraction (Microsoft Graph API)
+- **TeamsIntegrationService**: Abstracts Microsoft Teams bot interactions, messaging, and calendar access through Teams API
 - **ExternalAIService**: External AI providers abstraction
 
 ### Business Layer

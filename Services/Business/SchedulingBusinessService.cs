@@ -1,5 +1,6 @@
 using InterviewSchedulingBot.Interfaces.Business;
 using InterviewSchedulingBot.Interfaces.Integration;
+using InterviewSchedulingBot.Models;
 
 namespace InterviewSchedulingBot.Services.Business
 {

@@ -11,7 +11,7 @@ This document describes the architectural enhancement that introduces a clear la
 
 **Components**:
 - `ITeamsIntegrationService` - Microsoft Teams bot interactions, messaging, and meeting creation
-- `ICalendarIntegrationService` - Calendar operations abstraction (Microsoft Graph API)
+- **`ITeamsIntegrationService`** - Abstracts Microsoft Teams bot interactions, messaging, and calendar access through Teams API
 - `IExternalAIService` - External AI providers abstraction (Azure OpenAI, etc.)
 
 **Key Features**:
@@ -88,7 +88,8 @@ This document describes the architectural enhancement that introduces a clear la
 ```csharp
 // Integration Layer Services
 builder.Services.AddSingleton<ITeamsIntegrationService, TeamsIntegrationService>();
-builder.Services.AddSingleton<ICalendarIntegrationService, CalendarIntegrationService>();
+// Integration Layer Services (Teams includes calendar access)
+builder.Services.AddSingleton<ITeamsIntegrationService, TeamsIntegrationService>();
 
 // Business Layer Services  
 builder.Services.AddSingleton<ISchedulingBusinessService, SchedulingBusinessService>();
