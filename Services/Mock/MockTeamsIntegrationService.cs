@@ -182,15 +182,24 @@ namespace InterviewSchedulingBot.Services.Mock
                     {
                         foreach (var slot in userCalendar.BusySlots)
                         {
-                            if (DateTime.TryParse(slot.Start, out var start) && DateTime.TryParse(slot.End, out var end))
+                            // Parse with explicit format to handle timezone-aware dates consistently
+                            if (DateTime.TryParse(slot.Start, null, System.Globalization.DateTimeStyles.RoundtripKind, out var start) && 
+                                DateTime.TryParse(slot.End, null, System.Globalization.DateTimeStyles.RoundtripKind, out var end))
                             {
+                                // Convert to UTC for consistent comparison
+                                start = start.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(start, DateTimeKind.Local).ToUniversalTime() : start.ToUniversalTime();
+                                end = end.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(end, DateTimeKind.Local).ToUniversalTime() : end.ToUniversalTime();
+                                
+                                var utcStartTime = startTime.ToUniversalTime();
+                                var utcEndTime = endTime.ToUniversalTime();
+                                
                                 // Only include slots that overlap with the requested time range
-                                if (start < endTime && end > startTime)
+                                if (start < utcEndTime && end > utcStartTime)
                                 {
                                     busySlots.Add(new BusyTimeSlot
                                     {
-                                        Start = start,
-                                        End = end,
+                                        Start = start.ToLocalTime(), // Convert back to local for business logic
+                                        End = end.ToLocalTime(),
                                         Status = slot.Status,
                                         Subject = slot.Subject
                                     });

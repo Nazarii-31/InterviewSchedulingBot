@@ -1279,6 +1279,14 @@ footer {
     border: 1px solid #90caf9;
 }
 
+.timezone-info {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 400;
+    margin-left: 8px;
+    opacity: 0.8;
+}
+
 .slot-availability {
     display: flex;
     align-items: center;

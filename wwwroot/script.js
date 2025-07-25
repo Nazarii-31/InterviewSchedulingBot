@@ -299,11 +299,19 @@ function createTimeSlotCardHtml(slot, totalParticipants) {
     const timeOptions = { 
         hour: '2-digit', 
         minute: '2-digit',
-        hour12: true
+        hour12: true,
+        timeZoneName: 'short'
     };
     
     const startTime = startDate.toLocaleTimeString('en-US', timeOptions);
-    const endTime = endDate.toLocaleTimeString('en-US', timeOptions);
+    const endTime = endDate.toLocaleTimeString('en-US', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+    }); // Don't repeat timezone for end time
+    
+    // Get timezone for display
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     
     // Calculate participant availability
     const availableCount = timeSlot.availableAttendees?.length || 0;
@@ -316,6 +324,7 @@ function createTimeSlotCardHtml(slot, totalParticipants) {
                 <div class="slot-time">
                     <i class="fas fa-clock"></i>
                     <span class="time-range">${startTime} - ${endTime}</span>
+                    <span class="timezone-info" title="All times shown in ${timezone}">(${timezone.split('/').pop()})</span>
                 </div>
                 <div class="slot-score">
                     <span class="score-badge score-${getScoreClass(score)}" title="Time Slot Quality Score - Based on time of day preference, working hours alignment, and calendar availability. Higher scores indicate more optimal meeting times.">

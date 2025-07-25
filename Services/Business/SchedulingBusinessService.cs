@@ -346,14 +346,15 @@ namespace InterviewSchedulingBot.Services.Business
                 if (daySlots.Any())
                 {
                     dailySlots[currentDate] = daySlots;
-                    recommendations.AddRange(daySlots.Take(2)); // Take top 2 slots per day for recommendations
+                    // Take more slots per day to increase variety - include up to 4 slots per day
+                    recommendations.AddRange(daySlots.Take(4)); 
                 }
 
                 currentDate = currentDate.AddDays(1);
             }
 
             // Sort by start time chronologically, then by business score for same time
-            return recommendations.OrderBy(r => r.TimeSlot.StartTime).ThenByDescending(r => r.BusinessScore).Take(10).ToList();
+            return recommendations.OrderBy(r => r.TimeSlot.StartTime).ThenByDescending(r => r.BusinessScore).Take(15).ToList();
         }
 
         private async Task<List<BusinessRankedTimeSlot>> GenerateAlternativesAsync(SchedulingBusinessRequest request)
@@ -576,7 +577,23 @@ namespace InterviewSchedulingBot.Services.Business
                     {
                         var busySlots = calendarAvailability[email];
                         bool participantBusy = busySlots.Any(slot => 
-                            currentTime < slot.End && slotEnd > slot.Start);
+                        {
+                            // Ensure both times are in the same timezone for comparison
+                            var busySlotStart = slot.Start.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(slot.Start, DateTimeKind.Local) : slot.Start;
+                            var busySlotEnd = slot.End.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(slot.End, DateTimeKind.Local) : slot.End;
+                            var meetingStart = currentTime.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(currentTime, DateTimeKind.Local) : currentTime;
+                            var meetingEnd = slotEnd.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(slotEnd, DateTimeKind.Local) : slotEnd;
+                            
+                            // Proper overlap detection: meetings overlap if start < other.end AND end > other.start
+                            bool hasOverlap = meetingStart < busySlotEnd && meetingEnd > busySlotStart;
+                            if (hasOverlap)
+                            {
+                                _logger.LogDebug("Conflict detected for {Email}: Meeting {MeetingStart}-{MeetingEnd} overlaps with {SlotStart}-{SlotEnd} ({Subject})", 
+                                    email, meetingStart.ToString("yyyy-MM-dd HH:mm"), meetingEnd.ToString("yyyy-MM-dd HH:mm"),
+                                    busySlotStart.ToString("yyyy-MM-dd HH:mm"), busySlotEnd.ToString("yyyy-MM-dd HH:mm"), slot.Subject);
+                            }
+                            return hasOverlap;
+                        });
 
                         if (participantBusy)
                         {
@@ -598,7 +615,8 @@ namespace InterviewSchedulingBot.Services.Business
                 var baseScore = CalculateTimeSlotBusinessScore(currentTime, request.DurationMinutes);
                 var adjustedScore = baseScore * availabilityRatio;
 
-                // Only include slots that have at least some participants available (not completely conflicted)
+                // Include ALL slots that have at least some participants available
+                // Don't filter out partially available slots - let the user see all options
                 if (availableParticipants.Count > 0)
                 {
                     var reasons = GenerateSlotReasons(currentTime, availableParticipants.Count, request.ParticipantEmails.Count);
@@ -625,6 +643,7 @@ namespace InterviewSchedulingBot.Services.Business
                 currentTime = currentTime.AddMinutes(30);
             }
 
+            // Return more slots per day to increase variety
             return slots.OrderBy(s => s.TimeSlot.StartTime).ThenByDescending(s => s.BusinessScore).ToList();
         }
 
