@@ -245,24 +245,37 @@ jane.smith@company.com</textarea>
             </div>
             
             <div class="mock-data-section">
-                <h3><i class="fas fa-users"></i> User Profiles</h3>
-                <div id="user-profiles">
-                    <!-- User profiles will be populated by JavaScript -->
+                <h3><i class="fas fa-users"></i> Mock Data Management</h3>
+                
+                <!-- Calendar Generation Controls -->
+                <div class="calendar-generation-controls">
+                    <h4><i class="fas fa-cog"></i> Calendar Generation Settings</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="generation-duration">Generate calendar events for:</label>
+                            <select id="generation-duration">
+                                <option value="1">1 Day</option>
+                                <option value="3">3 Days</option>
+                                <option value="7" selected>1 Week</option>
+                                <option value="14">2 Weeks</option>
+                                <option value="30">1 Month</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="generation-density">Meeting density:</label>
+                            <select id="generation-density">
+                                <option value="low">Low (0-1 per day)</option>
+                                <option value="medium" selected>Medium (1-3 per day)</option>
+                                <option value="high">High (3-5 per day)</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 
-                <h3><i class="fas fa-calendar"></i> Calendar Availability</h3>
-                <div id="calendar-availability">
-                    <!-- Calendar data will be populated by JavaScript -->
-                </div>
-                
-                <h3><i class="fas fa-clock"></i> Working Hours</h3>
-                <div id="working-hours">
-                    <!-- Working hours will be populated by JavaScript -->
-                </div>
-                
-                <h3><i class="fas fa-signal"></i> Presence Status</h3>
-                <div id="presence-status">
-                    <!-- Presence data will be populated by JavaScript -->
+                <!-- Unified User Data -->
+                <h4><i class="fas fa-database"></i> User Data</h4>
+                <div id="unified-user-data">
+                    <!-- User data will be populated by JavaScript -->
                 </div>
                 
                 <div class="mock-data-actions">
@@ -271,6 +284,9 @@ jane.smith@company.com</textarea>
                     </button>
                     <button type="button" class="btn-secondary" onclick="generateRandomData()">
                         <i class="fas fa-random"></i> Generate Random Data
+                    </button>
+                    <button type="button" class="btn-secondary" onclick="regenerateCalendarData()">
+                        <i class="fas fa-calendar-plus"></i> Regenerate Calendar Events
                     </button>
                     <button type="button" class="btn-secondary" onclick="exportMockData()">
                         <i class="fas fa-download"></i> Export Data

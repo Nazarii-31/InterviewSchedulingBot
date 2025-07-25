@@ -11,10 +11,14 @@ namespace InterviewSchedulingBot.Services.Business
     public class SchedulingBusinessService : ISchedulingBusinessService
     {
         private readonly ILogger<SchedulingBusinessService> _logger;
+        private readonly ITeamsIntegrationService _teamsIntegrationService;
 
-        public SchedulingBusinessService(ILogger<SchedulingBusinessService> logger)
+        public SchedulingBusinessService(
+            ILogger<SchedulingBusinessService> logger,
+            ITeamsIntegrationService teamsIntegrationService)
         {
             _logger = logger;
+            _teamsIntegrationService = teamsIntegrationService;
         }
 
         public async Task<SchedulingBusinessResult> FindOptimalInterviewSlotsAsync(SchedulingBusinessRequest request)
@@ -306,61 +310,96 @@ namespace InterviewSchedulingBot.Services.Business
 
         private async Task<List<BusinessRankedTimeSlot>> GenerateRecommendationsAsync(SchedulingBusinessRequest request)
         {
-            // This is a simplified implementation
-            // In a real scenario, this would integrate with calendar services and apply complex algorithms
+            _logger.LogInformation("Generating recommendations using real calendar availability");
             
             var recommendations = new List<BusinessRankedTimeSlot>();
-            var baseTime = request.EarliestDate.Date.AddHours(10); // 10 AM
+            
+            // Get calendar availability for all participants
+            var calendarAvailability = await _teamsIntegrationService.GetCalendarAvailabilityAsync(
+                null, // ITurnContext not needed for mock
+                request.ParticipantEmails,
+                request.EarliestDate,
+                request.LatestDate);
 
-            for (int i = 0; i < 3; i++)
+            // Get working hours for participants to respect business hours
+            var workingHoursMap = new Dictionary<string, WorkingHours>();
+            foreach (var email in request.ParticipantEmails)
             {
-                var suggestion = new CalendarMeetingTimeSuggestion
-                {
-                    StartTime = baseTime.AddDays(i),
-                    EndTime = baseTime.AddDays(i).AddMinutes(request.DurationMinutes),
-                    Confidence = Math.Max(70, 90 - (i * 10)),
-                    Reason = "Good availability for all participants",
-                    AvailableAttendees = request.ParticipantEmails.ToList(),
-                    ConflictingAttendees = new List<string>()
-                };
-
-                recommendations.Add(new BusinessRankedTimeSlot
-                {
-                    TimeSlot = suggestion,
-                    BusinessScore = suggestion.Confidence,
-                    BusinessReasons = new List<string> { "Optimal time based on working hours", "No conflicts detected" }
-                });
+                var workingHours = await _teamsIntegrationService.GetUserWorkingHoursAsync(null, email);
+                workingHoursMap[email] = workingHours;
             }
 
-            return recommendations;
+            // Find available slots for each weekday in the date range
+            var currentDate = request.EarliestDate.Date;
+            var dailySlots = new Dictionary<DateTime, List<BusinessRankedTimeSlot>>();
+
+            while (currentDate <= request.LatestDate.Date)
+            {
+                // Skip weekends
+                if (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday)
+                {
+                    currentDate = currentDate.AddDays(1);
+                    continue;
+                }
+
+                var daySlots = FindAvailableSlotsForDay(currentDate, request, calendarAvailability, workingHoursMap);
+                if (daySlots.Any())
+                {
+                    dailySlots[currentDate] = daySlots;
+                    recommendations.AddRange(daySlots.Take(2)); // Take top 2 slots per day for recommendations
+                }
+
+                currentDate = currentDate.AddDays(1);
+            }
+
+            // Sort by business score and return top recommendations
+            return recommendations.OrderByDescending(r => r.BusinessScore).Take(10).ToList();
         }
 
         private async Task<List<BusinessRankedTimeSlot>> GenerateAlternativesAsync(SchedulingBusinessRequest request)
         {
-            var alternatives = new List<BusinessRankedTimeSlot>();
-            var baseTime = request.EarliestDate.Date.AddHours(14); // 2 PM
+            _logger.LogInformation("Generating alternative slots using real calendar availability");
+            
+            // Get calendar availability
+            var calendarAvailability = await _teamsIntegrationService.GetCalendarAvailabilityAsync(
+                null, request.ParticipantEmails, request.EarliestDate, request.LatestDate);
 
-            for (int i = 0; i < 2; i++)
+            // Get working hours
+            var workingHoursMap = new Dictionary<string, WorkingHours>();
+            foreach (var email in request.ParticipantEmails)
             {
-                var suggestion = new CalendarMeetingTimeSuggestion
-                {
-                    StartTime = baseTime.AddDays(i + 1),
-                    EndTime = baseTime.AddDays(i + 1).AddMinutes(request.DurationMinutes),
-                    Confidence = Math.Max(50, 70 - (i * 10)),
-                    Reason = "Alternative time slot",
-                    AvailableAttendees = request.ParticipantEmails.ToList(),
-                    ConflictingAttendees = new List<string>()
-                };
-
-                alternatives.Add(new BusinessRankedTimeSlot
-                {
-                    TimeSlot = suggestion,
-                    BusinessScore = suggestion.Confidence,
-                    BusinessReasons = new List<string> { "Alternative option", "Later in the day" }
-                });
+                var workingHours = await _teamsIntegrationService.GetUserWorkingHoursAsync(null, email);
+                workingHoursMap[email] = workingHours;
             }
 
-            return alternatives;
+            var alternatives = new List<BusinessRankedTimeSlot>();
+            var currentDate = request.EarliestDate.Date;
+
+            // Look for alternative times (later in the day, different days)
+            while (currentDate <= request.LatestDate.Date && alternatives.Count < 5)
+            {
+                if (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday)
+                {
+                    currentDate = currentDate.AddDays(1);
+                    continue;
+                }
+
+                // Focus on afternoon slots for alternatives
+                var afternoonSlots = FindAvailableSlotsForDay(currentDate, request, calendarAvailability, workingHoursMap)
+                    .Where(slot => slot.TimeSlot.StartTime.Hour >= 14) // 2 PM or later
+                    .Take(2);
+
+                foreach (var slot in afternoonSlots)
+                {
+                    slot.BusinessReasons.Add("Alternative afternoon option");
+                    slot.BusinessScore *= 0.9; // Slightly lower score for alternatives
+                    alternatives.Add(slot);
+                }
+
+                currentDate = currentDate.AddDays(1);
+            }
+
+            return alternatives.OrderByDescending(a => a.BusinessScore).ToList();
         }
 
         private async Task<BusinessInsights> GenerateBusinessInsightsAsync(
@@ -487,6 +526,150 @@ namespace InterviewSchedulingBot.Services.Business
             }
             
             return suggestions;
+        }
+
+        private List<BusinessRankedTimeSlot> FindAvailableSlotsForDay(
+            DateTime date, 
+            SchedulingBusinessRequest request, 
+            Dictionary<string, List<BusyTimeSlot>> calendarAvailability,
+            Dictionary<string, WorkingHours> workingHoursMap)
+        {
+            var slots = new List<BusinessRankedTimeSlot>();
+            
+            // Determine working hours for this day (use earliest start and latest end)
+            var dayWorkingStart = TimeSpan.FromHours(9); // Default 9 AM
+            var dayWorkingEnd = TimeSpan.FromHours(17);   // Default 5 PM
+            
+            foreach (var workingHours in workingHoursMap.Values)
+            {
+                if (workingHours.DaysOfWeek.Contains(date.DayOfWeek.ToString()))
+                {
+                    if (TimeSpan.TryParse(workingHours.StartTime, out var start))
+                    {
+                        if (start < dayWorkingStart) dayWorkingStart = start;
+                    }
+                    if (TimeSpan.TryParse(workingHours.EndTime, out var end))
+                    {
+                        if (end > dayWorkingEnd) dayWorkingEnd = end;
+                    }
+                }
+            }
+
+            // Create time slots every 30 minutes during working hours
+            var slotDuration = TimeSpan.FromMinutes(request.DurationMinutes);
+            var currentTime = date.Add(dayWorkingStart);
+            var endOfWorkingDay = date.Add(dayWorkingEnd).Subtract(slotDuration);
+
+            while (currentTime <= endOfWorkingDay)
+            {
+                var slotEnd = currentTime.Add(slotDuration);
+                
+                // Check if this slot conflicts with any participant's calendar
+                bool hasConflict = false;
+                var availableParticipants = new List<string>();
+                var conflictingParticipants = new List<string>();
+
+                foreach (var email in request.ParticipantEmails)
+                {
+                    if (calendarAvailability.ContainsKey(email))
+                    {
+                        var busySlots = calendarAvailability[email];
+                        bool participantBusy = busySlots.Any(slot => 
+                            currentTime < slot.End && slotEnd > slot.Start);
+
+                        if (participantBusy)
+                        {
+                            hasConflict = true;
+                            conflictingParticipants.Add(email);
+                        }
+                        else
+                        {
+                            availableParticipants.Add(email);
+                        }
+                    }
+                    else
+                    {
+                        availableParticipants.Add(email); // Assume available if no calendar data
+                    }
+                }
+
+                // If no conflicts, add this as an available slot
+                if (!hasConflict)
+                {
+                    var businessScore = CalculateTimeSlotBusinessScore(currentTime, request.DurationMinutes);
+                    var reasons = GenerateSlotReasons(currentTime, availableParticipants.Count, request.ParticipantEmails.Count);
+
+                    var suggestion = new CalendarMeetingTimeSuggestion
+                    {
+                        StartTime = currentTime,
+                        EndTime = slotEnd,
+                        Confidence = businessScore,
+                        Reason = string.Join(", ", reasons),
+                        AvailableAttendees = availableParticipants,
+                        ConflictingAttendees = conflictingParticipants
+                    };
+
+                    slots.Add(new BusinessRankedTimeSlot
+                    {
+                        TimeSlot = suggestion,
+                        BusinessScore = businessScore,
+                        BusinessReasons = reasons
+                    });
+                }
+
+                // Move to next 30-minute slot
+                currentTime = currentTime.AddMinutes(30);
+            }
+
+            return slots.OrderByDescending(s => s.BusinessScore).ToList();
+        }
+
+        private double CalculateTimeSlotBusinessScore(DateTime startTime, int durationMinutes)
+        {
+            double score = 70; // Base score
+            
+            var hour = startTime.Hour;
+            var dayOfWeek = startTime.DayOfWeek;
+            
+            // Time of day preferences
+            if (hour >= 10 && hour <= 11) score += 20; // Mid-morning bonus
+            else if (hour >= 14 && hour <= 15) score += 15; // Early afternoon bonus
+            else if (hour >= 9 && hour <= 16) score += 10; // Standard working hours
+            else if (hour < 9 || hour > 17) score -= 30; // Penalty for outside working hours
+            
+            // Day of week preferences
+            if (dayOfWeek >= DayOfWeek.Tuesday && dayOfWeek <= DayOfWeek.Thursday) score += 5; // Mid-week bonus
+            else if (dayOfWeek == DayOfWeek.Monday || dayOfWeek == DayOfWeek.Friday) score -= 5; // Slight penalty for Monday/Friday
+            
+            // Duration considerations
+            if (durationMinutes <= 60) score += 5; // Short meetings are easier to schedule
+            else if (durationMinutes > 120) score -= 10; // Long meetings are harder
+            
+            return Math.Min(100, Math.Max(0, score));
+        }
+
+        private List<string> GenerateSlotReasons(DateTime startTime, int availableCount, int totalCount)
+        {
+            var reasons = new List<string>();
+            
+            if (availableCount == totalCount)
+                reasons.Add("All participants available");
+            else
+                reasons.Add($"{availableCount} of {totalCount} participants available");
+            
+            var hour = startTime.Hour;
+            if (hour >= 10 && hour <= 11)
+                reasons.Add("Optimal morning time slot");
+            else if (hour >= 14 && hour <= 15)
+                reasons.Add("Good afternoon time slot");
+            else if (hour >= 9 && hour <= 16)
+                reasons.Add("During standard working hours");
+            
+            var dayOfWeek = startTime.DayOfWeek;
+            if (dayOfWeek >= DayOfWeek.Tuesday && dayOfWeek <= DayOfWeek.Thursday)
+                reasons.Add("Mid-week scheduling preferred");
+            
+            return reasons;
         }
 
         #endregion

@@ -604,56 +604,149 @@ let mockData = {
 
 // Initialize mock data display
 function initializeMockData() {
-    displayUserProfiles();
-    displayWorkingHours();
-    displayPresenceStatus();
-    displayCalendarAvailability();
+    displayUnifiedUserData();
 }
 
-// Display user profiles
-function displayUserProfiles() {
-    const container = document.getElementById('user-profiles');
-    const html = mockData.userProfiles.map(user => `
-        <div class="user-profile-card" data-user-id="${user.id}">
-            <div class="card-header">
-                <div class="card-title">
-                    <i class="fas fa-user"></i>
-                    <span class="editable-field" contenteditable="true" data-field="name">${user.name}</span>
+// Display unified user data
+function displayUnifiedUserData() {
+    const container = document.getElementById('unified-user-data');
+    const html = mockData.userProfiles.map(user => {
+        // Find corresponding working hours, presence, and calendar data
+        const workingHours = mockData.workingHours.find(wh => wh.userEmail === user.email) || {};
+        const presence = mockData.presenceStatus.find(ps => ps.userEmail === user.email) || {};
+        const calendar = mockData.calendarAvailability.find(ca => ca.userEmail === user.email) || { busySlots: [] };
+
+        return `
+            <div class="unified-user-card" data-user-id="${user.id}">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fas fa-user"></i>
+                        <span class="editable-field" contenteditable="true" data-field="name" data-section="profile">${user.name}</span>
+                        <span class="presence-indicator presence-${presence.availability?.toLowerCase() || 'available'}" title="${presence.availability || 'Available'}"></span>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn-small btn-edit" onclick="toggleUnifiedEdit(this)">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-small btn-delete" onclick="deleteUser('${user.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
-                <div class="card-actions">
-                    <button class="btn-small btn-edit" onclick="toggleEdit(this)">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn-small btn-delete" onclick="deleteUser('${user.id}')">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                
+                <div class="card-content">
+                    <!-- Profile Information -->
+                    <div class="user-section">
+                        <h5><i class="fas fa-id-card"></i> Profile</h5>
+                        <div class="data-row">
+                            <span class="field-label">Email:</span>
+                            <span class="field-value editable-field" contenteditable="true" data-field="email" data-section="profile">${user.email}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="field-label">Job Title:</span>
+                            <span class="field-value editable-field" contenteditable="true" data-field="jobTitle" data-section="profile">${user.jobTitle}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="field-label">Department:</span>
+                            <span class="field-value editable-field" contenteditable="true" data-field="department" data-section="profile">${user.department}</span>
+                        </div>
+                        <div class="data-row">
+                            <span class="field-label">Time Zone:</span>
+                            <select class="field-value editable-select" data-field="timeZone" data-section="profile">
+                                <option value="Pacific Standard Time" ${user.timeZone === 'Pacific Standard Time' ? 'selected' : ''}>Pacific Standard Time</option>
+                                <option value="Eastern Standard Time" ${user.timeZone === 'Eastern Standard Time' ? 'selected' : ''}>Eastern Standard Time</option>
+                                <option value="GMT Standard Time" ${user.timeZone === 'GMT Standard Time' ? 'selected' : ''}>GMT Standard Time</option>
+                                <option value="Central Standard Time" ${user.timeZone === 'Central Standard Time' ? 'selected' : ''}>Central Standard Time</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Working Hours -->
+                    <div class="user-section">
+                        <h5><i class="fas fa-clock"></i> Working Hours</h5>
+                        <div class="data-row">
+                            <span class="field-label">Time Zone:</span>
+                            <select class="field-value editable-select" data-field="timeZone" data-section="workingHours">
+                                <option value="Pacific Standard Time" ${workingHours.timeZone === 'Pacific Standard Time' ? 'selected' : ''}>Pacific Standard Time</option>
+                                <option value="Eastern Standard Time" ${workingHours.timeZone === 'Eastern Standard Time' ? 'selected' : ''}>Eastern Standard Time</option>
+                                <option value="GMT Standard Time" ${workingHours.timeZone === 'GMT Standard Time' ? 'selected' : ''}>GMT Standard Time</option>
+                                <option value="Central Standard Time" ${workingHours.timeZone === 'Central Standard Time' ? 'selected' : ''}>Central Standard Time</option>
+                            </select>
+                        </div>
+                        <div class="data-row">
+                            <span class="field-label">Start Time:</span>
+                            <input type="time" class="field-value editable-field" data-field="startTime" data-section="workingHours" value="${workingHours.startTime || '09:00:00'}">
+                        </div>
+                        <div class="data-row">
+                            <span class="field-label">End Time:</span>
+                            <input type="time" class="field-value editable-field" data-field="endTime" data-section="workingHours" value="${workingHours.endTime || '17:00:00'}">
+                        </div>
+                        <div class="data-row">
+                            <span class="field-label">Days:</span>
+                            <span class="field-value">${(workingHours.daysOfWeek || ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']).join(', ')}</span>
+                        </div>
+                    </div>
+
+                    <!-- Presence Status -->
+                    <div class="user-section">
+                        <h5><i class="fas fa-signal"></i> Presence</h5>
+                        <div class="data-row">
+                            <span class="field-label">Availability:</span>
+                            <select class="field-value editable-select" data-field="availability" data-section="presence">
+                                <option value="Available" ${presence.availability === 'Available' ? 'selected' : ''}>Available</option>
+                                <option value="Busy" ${presence.availability === 'Busy' ? 'selected' : ''}>Busy</option>
+                                <option value="DoNotDisturb" ${presence.availability === 'DoNotDisturb' ? 'selected' : ''}>Do Not Disturb</option>
+                                <option value="Away" ${presence.availability === 'Away' ? 'selected' : ''}>Away</option>
+                            </select>
+                        </div>
+                        <div class="data-row">
+                            <span class="field-label">Activity:</span>
+                            <select class="field-value editable-select" data-field="activity" data-section="presence">
+                                <option value="Available" ${presence.activity === 'Available' ? 'selected' : ''}>Available</option>
+                                <option value="InACall" ${presence.activity === 'InACall' ? 'selected' : ''}>In a Call</option>
+                                <option value="InAMeeting" ${presence.activity === 'InAMeeting' ? 'selected' : ''}>In a Meeting</option>
+                                <option value="Busy" ${presence.activity === 'Busy' ? 'selected' : ''}>Busy</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Calendar Events -->
+                    <div class="user-section">
+                        <h5><i class="fas fa-calendar"></i> Calendar Events (${calendar.busySlots.length})</h5>
+                        <div class="calendar-events">
+                            ${calendar.busySlots.map((slot, slotIndex) => `
+                                <div class="busy-slot-unified" data-slot-index="${slotIndex}">
+                                    <div class="slot-details">
+                                        <div class="slot-time">
+                                            <input type="datetime-local" value="${slot.start.slice(0, -1)}" data-field="start" class="editable-field" data-section="calendar">
+                                            to
+                                            <input type="datetime-local" value="${slot.end.slice(0, -1)}" data-field="end" class="editable-field" data-section="calendar">
+                                        </div>
+                                        <div class="slot-subject">
+                                            <input type="text" value="${slot.subject || 'Meeting'}" data-field="subject" class="editable-field" data-section="calendar" placeholder="Meeting subject">
+                                        </div>
+                                    </div>
+                                    <div class="slot-actions">
+                                        <select class="slot-status status-${slot.status?.toLowerCase() || 'busy'}" data-field="status" data-section="calendar">
+                                            <option value="Busy" ${slot.status === 'Busy' ? 'selected' : ''}>Busy</option>
+                                            <option value="Tentative" ${slot.status === 'Tentative' ? 'selected' : ''}>Tentative</option>
+                                        </select>
+                                        <button class="btn-small btn-delete" onclick="deleteBusySlotUnified('${user.email}', ${slotIndex})">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                            ${calendar.busySlots.length === 0 ? '<p class="no-events">No calendar events</p>' : ''}
+                            <button class="btn-small btn-add" onclick="addBusySlotUnified('${user.email}')">
+                                <i class="fas fa-plus"></i> Add Calendar Event
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="card-content">
-                <div class="data-field">
-                    <span class="field-label">Email:</span>
-                    <span class="field-value editable-field" contenteditable="true" data-field="email">${user.email}</span>
-                </div>
-                <div class="data-field">
-                    <span class="field-label">Job Title:</span>
-                    <span class="field-value editable-field" contenteditable="true" data-field="jobTitle">${user.jobTitle}</span>
-                </div>
-                <div class="data-field">
-                    <span class="field-label">Department:</span>
-                    <span class="field-value editable-field" contenteditable="true" data-field="department">${user.department}</span>
-                </div>
-                <div class="data-field">
-                    <span class="field-label">Time Zone:</span>
-                    <select class="field-value editable-select" data-field="timeZone">
-                        <option value="Pacific Standard Time" ${user.timeZone === 'Pacific Standard Time' ? 'selected' : ''}>Pacific Standard Time</option>
-                        <option value="Eastern Standard Time" ${user.timeZone === 'Eastern Standard Time' ? 'selected' : ''}>Eastern Standard Time</option>
-                        <option value="GMT Standard Time" ${user.timeZone === 'GMT Standard Time' ? 'selected' : ''}>GMT Standard Time</option>
-                        <option value="Central Standard Time" ${user.timeZone === 'Central Standard Time' ? 'selected' : ''}>Central Standard Time</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-    `).join('');
+        `;
+    }).join('');
     
     container.innerHTML = html + `
         <div class="add-new-btn" onclick="addNewUser()">
@@ -663,48 +756,193 @@ function displayUserProfiles() {
     `;
 }
 
-// Display working hours
-function displayWorkingHours() {
-    const container = document.getElementById('working-hours');
-    const html = mockData.workingHours.map((hours, index) => `
-        <div class="working-hours-card" data-hours-index="${index}">
-            <div class="card-header">
-                <div class="card-title">
-                    <i class="fas fa-clock"></i>
-                    ${hours.userEmail}
-                </div>
-                <div class="card-actions">
-                    <button class="btn-small btn-edit" onclick="toggleEdit(this)">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn-small btn-delete" onclick="deleteWorkingHours(${index})">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="card-content">
-                <div class="data-field">
-                    <span class="field-label">Time Zone:</span>
-                    <select class="field-value editable-select" data-field="timeZone">
-                        <option value="Pacific Standard Time" ${hours.timeZone === 'Pacific Standard Time' ? 'selected' : ''}>Pacific Standard Time</option>
-                        <option value="Eastern Standard Time" ${hours.timeZone === 'Eastern Standard Time' ? 'selected' : ''}>Eastern Standard Time</option>
-                        <option value="GMT Standard Time" ${hours.timeZone === 'GMT Standard Time' ? 'selected' : ''}>GMT Standard Time</option>
-                        <option value="Central Standard Time" ${hours.timeZone === 'Central Standard Time' ? 'selected' : ''}>Central Standard Time</option>
-                    </select>
-                </div>
-                <div class="data-field">
-                    <span class="field-label">Start Time:</span>
-                    <input type="time" class="field-value editable-field" data-field="startTime" value="${hours.startTime}">
-                </div>
-                <div class="data-field">
-                    <span class="field-label">End Time:</span>
-                    <input type="time" class="field-value editable-field" data-field="endTime" value="${hours.endTime}">
-                </div>
-                <div class="data-field">
-                    <span class="field-label">Days:</span>
-                    <span class="field-value">${hours.daysOfWeek.join(', ')}</span>
-                </div>
-            </div>
+// Toggle edit mode for unified user cards
+function toggleUnifiedEdit(button) {
+    const card = button.closest('.unified-user-card');
+    const editableFields = card.querySelectorAll('.editable-field, .editable-select');
+    
+    if (button.innerHTML.includes('edit')) {
+        // Enable editing
+        editableFields.forEach(field => {
+            if (field.tagName === 'SELECT') {
+                field.disabled = false;
+            } else if (field.tagName === 'INPUT') {
+                field.disabled = false;
+                field.style.background = '#fff9c4';
+            } else {
+                field.setAttribute('contenteditable', 'true');
+                field.style.background = '#fff9c4';
+            }
+        });
+        button.innerHTML = '<i class="fas fa-save"></i>';
+        button.classList.remove('btn-edit');
+        button.classList.add('btn-save');
+    } else {
+        // Save changes
+        saveUnifiedCardData(card);
+        editableFields.forEach(field => {
+            if (field.tagName === 'SELECT') {
+                field.disabled = true;
+            } else if (field.tagName === 'INPUT') {
+                field.disabled = true;
+                field.style.background = 'transparent';
+            } else {
+                field.setAttribute('contenteditable', 'false');
+                field.style.background = 'transparent';
+            }
+        });
+        button.innerHTML = '<i class="fas fa-edit"></i>';
+        button.classList.remove('btn-save');
+        button.classList.add('btn-edit');
+    }
+}
+
+// Save unified card data to mock data
+function saveUnifiedCardData(card) {
+    const userId = card.getAttribute('data-user-id');
+    const user = mockData.userProfiles.find(u => u.id === userId);
+    if (!user) return;
+
+    const editableFields = card.querySelectorAll('.editable-field, .editable-select');
+    
+    editableFields.forEach(field => {
+        const fieldName = field.getAttribute('data-field');
+        const section = field.getAttribute('data-section');
+        const value = field.tagName === 'SELECT' ? field.value : 
+                     field.tagName === 'INPUT' ? field.value : 
+                     field.textContent.trim();
+        
+        if (section === 'profile' && fieldName) {
+            user[fieldName] = value;
+        } else if (section === 'workingHours' && fieldName) {
+            let workingHours = mockData.workingHours.find(wh => wh.userEmail === user.email);
+            if (!workingHours) {
+                workingHours = {
+                    userEmail: user.email,
+                    timeZone: 'Pacific Standard Time',
+                    daysOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+                    startTime: '09:00:00',
+                    endTime: '17:00:00'
+                };
+                mockData.workingHours.push(workingHours);
+            }
+            workingHours[fieldName] = value;
+        } else if (section === 'presence' && fieldName) {
+            let presence = mockData.presenceStatus.find(ps => ps.userEmail === user.email);
+            if (!presence) {
+                presence = {
+                    userEmail: user.email,
+                    availability: 'Available',
+                    activity: 'Available',
+                    lastModified: new Date().toISOString()
+                };
+                mockData.presenceStatus.push(presence);
+            }
+            presence[fieldName] = value;
+            presence.lastModified = new Date().toISOString();
+        }
+    });
+    
+    // Update the display to reflect changes
+    updateSchedulingForms();
+}
+
+// Add busy slot for unified interface
+function addBusySlotUnified(userEmail) {
+    let calendar = mockData.calendarAvailability.find(ca => ca.userEmail === userEmail);
+    if (!calendar) {
+        calendar = { userEmail: userEmail, busySlots: [] };
+        mockData.calendarAvailability.push(calendar);
+    }
+    
+    const now = new Date();
+    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour later
+    
+    const newSlot = {
+        start: now.toISOString(),
+        end: endTime.toISOString(),
+        status: 'Busy',
+        subject: 'New Meeting'
+    };
+    
+    calendar.busySlots.push(newSlot);
+    displayUnifiedUserData();
+}
+
+// Delete busy slot for unified interface
+function deleteBusySlotUnified(userEmail, slotIndex) {
+    if (confirm('Are you sure you want to delete this calendar event?')) {
+        const calendar = mockData.calendarAvailability.find(ca => ca.userEmail === userEmail);
+        if (calendar && calendar.busySlots[slotIndex]) {
+            calendar.busySlots.splice(slotIndex, 1);
+            displayUnifiedUserData();
+        }
+    }
+}
+
+// Regenerate calendar data with specified duration
+function regenerateCalendarData() {
+    const duration = parseInt(document.getElementById('generation-duration').value);
+    const density = document.getElementById('generation-density').value;
+    
+    const now = new Date();
+    const endDate = new Date(now.getTime() + duration * 24 * 60 * 60 * 1000);
+    
+    mockData.userProfiles.forEach(user => {
+        const calendar = mockData.calendarAvailability.find(ca => ca.userEmail === user.email) || 
+                        { userEmail: user.email, busySlots: [] };
+        
+        if (!mockData.calendarAvailability.find(ca => ca.userEmail === user.email)) {
+            mockData.calendarAvailability.push(calendar);
+        }
+        
+        // Clear existing calendar events
+        calendar.busySlots = [];
+        
+        // Generate new events based on density
+        let meetingsPerDay;
+        switch (density) {
+            case 'low': meetingsPerDay = [0, 1]; break;
+            case 'high': meetingsPerDay = [3, 5]; break;
+            default: meetingsPerDay = [1, 3]; break;
+        }
+        
+        const currentDate = new Date(now);
+        while (currentDate <= endDate) {
+            if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) { // Skip weekends
+                const numMeetings = Math.floor(Math.random() * (meetingsPerDay[1] - meetingsPerDay[0] + 1)) + meetingsPerDay[0];
+                
+                for (let i = 0; i < numMeetings; i++) {
+                    const meetingStart = new Date(currentDate);
+                    meetingStart.setHours(Math.floor(Math.random() * 8) + 9); // 9 AM to 5 PM
+                    meetingStart.setMinutes(Math.floor(Math.random() * 2) * 30); // 0 or 30 minutes
+                    
+                    const meetingDuration = (Math.floor(Math.random() * 3) + 1) * 30; // 30, 60, or 90 minutes
+                    const meetingEnd = new Date(meetingStart.getTime() + meetingDuration * 60 * 1000);
+                    
+                    if (meetingEnd.getHours() <= 17) { // Don't exceed 5 PM
+                        const subjects = ['Team Meeting', 'Code Review', 'Product Planning', 'Client Call', 
+                                        'Sprint Planning', '1:1 Meeting', 'All Hands', 'Training Session'];
+                        
+                        calendar.busySlots.push({
+                            start: meetingStart.toISOString(),
+                            end: meetingEnd.toISOString(),
+                            status: Math.random() < 0.1 ? 'Tentative' : 'Busy',
+                            subject: subjects[Math.floor(Math.random() * subjects.length)]
+                        });
+                    }
+                }
+            }
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        // Sort events by start time
+        calendar.busySlots.sort((a, b) => new Date(a.start) - new Date(b.start));
+    });
+    
+    displayUnifiedUserData();
+    alert(`Calendar events regenerated for ${duration} days with ${density} density.`);
+}
         </div>
     `).join('');
     
@@ -801,69 +1039,6 @@ function displayCalendarAvailability() {
                 `).join('')}
                 ${calendar.busySlots.length === 0 ? '<p style="color: #6c757d; font-style: italic;">No busy slots</p>' : ''}
             </div>
-        </div>
-    `).join('');
-    
-    container.innerHTML = html;
-}
-
-// Toggle edit mode for a card
-function toggleEdit(button) {
-    const card = button.closest('.user-profile-card, .working-hours-card, .presence-card, .calendar-card');
-    const editableFields = card.querySelectorAll('.editable-field, .editable-select');
-    
-    if (button.innerHTML.includes('edit')) {
-        // Enable editing
-        editableFields.forEach(field => {
-            if (field.tagName === 'SELECT') {
-                field.disabled = false;
-            } else {
-                field.setAttribute('contenteditable', 'true');
-                field.style.background = '#fff9c4';
-            }
-        });
-        button.innerHTML = '<i class="fas fa-save"></i>';
-        button.classList.remove('btn-edit');
-        button.classList.add('btn-save');
-    } else {
-        // Save changes
-        saveCardData(card);
-        editableFields.forEach(field => {
-            if (field.tagName === 'SELECT') {
-                field.disabled = true;
-            } else {
-                field.setAttribute('contenteditable', 'false');
-                field.style.background = 'transparent';
-            }
-        });
-        button.innerHTML = '<i class="fas fa-edit"></i>';
-        button.classList.remove('btn-save');
-        button.classList.add('btn-edit');
-    }
-}
-
-// Save card data to mock data
-function saveCardData(card) {
-    const editableFields = card.querySelectorAll('.editable-field, .editable-select');
-    
-    if (card.classList.contains('user-profile-card')) {
-        const userId = card.getAttribute('data-user-id');
-        const user = mockData.userProfiles.find(u => u.id === userId);
-        
-        editableFields.forEach(field => {
-            const fieldName = field.getAttribute('data-field');
-            const value = field.tagName === 'SELECT' ? field.value : field.textContent.trim();
-            if (user && fieldName) {
-                user[fieldName] = value;
-            }
-        });
-    }
-    // Add similar logic for other card types...
-    
-    // Update the display to reflect changes
-    updateSchedulingForms();
-}
-
 // Add new user
 function addNewUser() {
     const newUser = {
@@ -876,40 +1051,46 @@ function addNewUser() {
     };
     
     mockData.userProfiles.push(newUser);
-    displayUserProfiles();
+    
+    // Add corresponding working hours, presence, and calendar data
+    mockData.workingHours.push({
+        userEmail: newUser.email,
+        timeZone: 'Pacific Standard Time',
+        daysOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+        startTime: '09:00:00',
+        endTime: '17:00:00'
+    });
+    
+    mockData.presenceStatus.push({
+        userEmail: newUser.email,
+        availability: 'Available',
+        activity: 'Available',
+        lastModified: new Date().toISOString()
+    });
+    
+    mockData.calendarAvailability.push({
+        userEmail: newUser.email,
+        busySlots: []
+    });
+    
+    displayUnifiedUserData();
     updateSchedulingForms();
 }
 
 // Delete user
 function deleteUser(userId) {
-    if (confirm('Are you sure you want to delete this user?')) {
-        mockData.userProfiles = mockData.userProfiles.filter(u => u.id !== userId);
-        displayUserProfiles();
-        updateSchedulingForms();
-    }
-}
-
-// Add busy slot
-function addBusySlot(calendarIndex) {
-    const now = new Date();
-    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour later
-    
-    const newSlot = {
-        start: now.toISOString(),
-        end: endTime.toISOString(),
-        status: 'Busy',
-        subject: 'New Meeting'
-    };
-    
-    mockData.calendarAvailability[calendarIndex].busySlots.push(newSlot);
-    displayCalendarAvailability();
-}
-
-// Delete busy slot
-function deleteBusySlot(calendarIndex, slotIndex) {
-    if (confirm('Are you sure you want to delete this busy slot?')) {
-        mockData.calendarAvailability[calendarIndex].busySlots.splice(slotIndex, 1);
-        displayCalendarAvailability();
+    if (confirm('Are you sure you want to delete this user? This will remove all their data.')) {
+        const user = mockData.userProfiles.find(u => u.id === userId);
+        if (user) {
+            // Remove from all mock data arrays
+            mockData.userProfiles = mockData.userProfiles.filter(u => u.id !== userId);
+            mockData.workingHours = mockData.workingHours.filter(wh => wh.userEmail !== user.email);
+            mockData.presenceStatus = mockData.presenceStatus.filter(ps => ps.userEmail !== user.email);
+            mockData.calendarAvailability = mockData.calendarAvailability.filter(ca => ca.userEmail !== user.email);
+            
+            displayUnifiedUserData();
+            updateSchedulingForms();
+        }
     }
 }
 
@@ -931,6 +1112,8 @@ function generateRandomData() {
         const randomTitles = ['Software Engineer', 'Product Manager', 'UX Designer', 'Engineering Manager', 'HR Business Partner'];
         const randomDepartments = ['Engineering', 'Product', 'Design', 'Management', 'Human Resources'];
         const timezones = ['Pacific Standard Time', 'Eastern Standard Time', 'GMT Standard Time', 'Central Standard Time'];
+        const availabilityStates = ['Available', 'Busy', 'DoNotDisturb', 'Away'];
+        const activityStates = ['Available', 'InACall', 'InAMeeting', 'Busy'];
         
         mockData.userProfiles = randomNames.map((name, index) => ({
             id: (index + 1).toString(),
@@ -941,8 +1124,33 @@ function generateRandomData() {
             timeZone: timezones[Math.floor(Math.random() * timezones.length)]
         }));
         
-        // Generate random calendar data and other mock data...
-        initializeMockData();
+        // Generate working hours
+        mockData.workingHours = mockData.userProfiles.map(user => ({
+            userEmail: user.email,
+            timeZone: user.timeZone,
+            daysOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+            startTime: ['08:00:00', '08:30:00', '09:00:00'][Math.floor(Math.random() * 3)],
+            endTime: ['16:30:00', '17:00:00', '17:30:00'][Math.floor(Math.random() * 3)]
+        }));
+        
+        // Generate presence status
+        mockData.presenceStatus = mockData.userProfiles.map(user => ({
+            userEmail: user.email,
+            availability: availabilityStates[Math.floor(Math.random() * availabilityStates.length)],
+            activity: activityStates[Math.floor(Math.random() * activityStates.length)],
+            lastModified: new Date().toISOString()
+        }));
+        
+        // Generate calendar availability
+        mockData.calendarAvailability = mockData.userProfiles.map(user => ({
+            userEmail: user.email,
+            busySlots: []
+        }));
+        
+        // Generate calendar events based on current settings
+        regenerateCalendarData();
+        
+        displayUnifiedUserData();
         updateSchedulingForms();
         alert('Random mock data has been generated.');
     }

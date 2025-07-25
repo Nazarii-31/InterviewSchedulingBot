@@ -157,7 +157,7 @@ namespace InterviewSchedulingBot.Services.Mock
             {
                 var busySlots = new List<BusyTimeSlot>();
 
-                // Generate realistic busy time patterns
+                // Generate realistic busy time patterns for the entire date range
                 var currentDate = startTime.Date;
                 while (currentDate <= endTime.Date)
                 {
@@ -177,11 +177,25 @@ namespace InterviewSchedulingBot.Services.Mock
                         var meetingDuration = _random.Next(30, 120); // 30 minutes to 2 hours
                         var meetingEnd = meetingStart.AddMinutes(meetingDuration);
 
+                        // Ensure meeting doesn't exceed working hours
+                        if (meetingEnd.Hour > 17)
+                        {
+                            meetingEnd = currentDate.AddHours(17);
+                        }
+
+                        var meetingSubjects = new[]
+                        {
+                            "Team Meeting", "Code Review", "Product Planning", "Client Call", 
+                            "Sprint Planning", "1:1 Meeting", "All Hands", "Training Session",
+                            "Design Review", "Architecture Discussion", "Project Sync", "Performance Review"
+                        };
+
                         busySlots.Add(new BusyTimeSlot
                         {
                             Start = meetingStart,
                             End = meetingEnd,
-                            Status = _random.NextDouble() < 0.1 ? "Tentative" : "Busy" // 10% tentative
+                            Status = _random.NextDouble() < 0.1 ? "Tentative" : "Busy", // 10% tentative
+                            Subject = meetingSubjects[_random.Next(meetingSubjects.Length)]
                         });
                     }
 

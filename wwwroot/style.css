@@ -805,3 +805,233 @@ footer {
         text-align: left;
     }
 }
+
+/* Unified User Interface Styles */
+.calendar-generation-controls {
+    background: var(--secondary-color);
+    padding: 20px;
+    border-radius: var(--border-radius);
+    margin-bottom: 30px;
+    border: 1px solid var(--border-color);
+}
+
+.calendar-generation-controls h4 {
+    margin-bottom: 15px;
+    color: var(--text-primary);
+}
+
+.unified-user-card {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    margin-bottom: 20px;
+    box-shadow: var(--shadow);
+    transition: var(--transition);
+}
+
+.unified-user-card:hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+}
+
+.unified-user-card .card-header {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: white;
+    padding: 15px 20px;
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.unified-user-card .card-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1em;
+    font-weight: 600;
+}
+
+.presence-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-left: 10px;
+}
+
+.presence-available { background-color: #28a745; }
+.presence-busy { background-color: #dc3545; }
+.presence-donotdisturb { background-color: #ffc107; }
+.presence-away { background-color: #6c757d; }
+
+.unified-user-card .card-content {
+    padding: 20px;
+}
+
+.user-section {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.user-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.user-section h5 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 15px;
+    color: var(--primary-color);
+    font-weight: 600;
+    font-size: 1em;
+}
+
+.data-row {
+    display: flex;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.data-row .field-label {
+    min-width: 120px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.data-row .field-value {
+    flex: 1;
+    padding: 5px 8px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.data-row .field-value:focus,
+.data-row .field-value[contenteditable="true"] {
+    border-color: var(--primary-color);
+    background-color: #fff9c4;
+    outline: none;
+}
+
+.calendar-events {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.busy-slot-unified {
+    background: var(--secondary-color);
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px solid #ddd;
+}
+
+.slot-details {
+    flex: 1;
+}
+
+.slot-time {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.slot-time input[type="datetime-local"] {
+    padding: 4px 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.slot-subject input {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.slot-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.slot-status {
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 0.85em;
+}
+
+.status-busy { background-color: #ffebee; color: #c62828; }
+.status-tentative { background-color: #fff3e0; color: #ef6c00; }
+
+.no-events {
+    color: var(--text-secondary);
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+.btn-add {
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.btn-add:hover {
+    background: #218838;
+}
+
+/* Responsive Design for Unified Interface */
+@media (max-width: 768px) {
+    .unified-user-card .card-header {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+    
+    .data-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .data-row .field-label {
+        min-width: auto;
+        font-weight: 600;
+    }
+    
+    .slot-time {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+    }
+    
+    .busy-slot-unified {
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .slot-actions {
+        align-self: stretch;
+        justify-content: space-between;
+    }
+}
