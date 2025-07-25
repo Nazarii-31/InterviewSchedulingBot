@@ -566,8 +566,7 @@ namespace InterviewSchedulingBot.Services.Business
             {
                 var slotEnd = currentTime.Add(slotDuration);
                 
-                // Check if this slot conflicts with any participant's calendar
-                bool hasConflict = false;
+                // Check availability for each participant
                 var availableParticipants = new List<string>();
                 var conflictingParticipants = new List<string>();
 
@@ -581,7 +580,6 @@ namespace InterviewSchedulingBot.Services.Business
 
                         if (participantBusy)
                         {
-                            hasConflict = true;
                             conflictingParticipants.Add(email);
                         }
                         else
@@ -595,17 +593,21 @@ namespace InterviewSchedulingBot.Services.Business
                     }
                 }
 
-                // If no conflicts, add this as an available slot
-                if (!hasConflict)
+                // Calculate business score based on availability ratio and time quality
+                var availabilityRatio = (double)availableParticipants.Count / request.ParticipantEmails.Count;
+                var baseScore = CalculateTimeSlotBusinessScore(currentTime, request.DurationMinutes);
+                var adjustedScore = baseScore * availabilityRatio;
+
+                // Only include slots that have at least some participants available (not completely conflicted)
+                if (availableParticipants.Count > 0)
                 {
-                    var businessScore = CalculateTimeSlotBusinessScore(currentTime, request.DurationMinutes);
                     var reasons = GenerateSlotReasons(currentTime, availableParticipants.Count, request.ParticipantEmails.Count);
 
                     var suggestion = new CalendarMeetingTimeSuggestion
                     {
                         StartTime = currentTime,
                         EndTime = slotEnd,
-                        Confidence = businessScore,
+                        Confidence = adjustedScore,
                         Reason = string.Join(", ", reasons),
                         AvailableAttendees = availableParticipants,
                         ConflictingAttendees = conflictingParticipants
@@ -614,7 +616,7 @@ namespace InterviewSchedulingBot.Services.Business
                     slots.Add(new BusinessRankedTimeSlot
                     {
                         TimeSlot = suggestion,
-                        BusinessScore = businessScore,
+                        BusinessScore = adjustedScore,
                         BusinessReasons = reasons
                     });
                 }

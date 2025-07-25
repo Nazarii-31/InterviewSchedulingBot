@@ -269,6 +269,46 @@ namespace InterviewSchedulingBot.Controllers.Api
             };
         }
 
+        /// <summary>
+        /// Update mock data for testing purposes
+        /// </summary>
+        /// <param name="mockData">Mock data to use for testing</param>
+        /// <returns>Success response</returns>
+        [HttpPost("update-mock-data")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(typeof(ApiErrorResponse), 400)]
+        public async Task<ActionResult> UpdateMockData([FromBody] MockDataRequest mockData)
+        {
+            _logger.LogInformation("Updating mock data for testing");
+
+            try
+            {
+                // If using mock service, update its data
+                if (_teamsService is Services.Mock.MockTeamsIntegrationService mockService)
+                {
+                    await mockService.UpdateMockDataAsync(mockData);
+                    return Ok(new { success = true, message = "Mock data updated successfully" });
+                }
+                else
+                {
+                    return BadRequest(new ApiErrorResponse
+                    {
+                        Error = "Mock data update not supported",
+                        Details = new List<string> { "This endpoint only works with mock services" }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating mock data");
+                return StatusCode(500, new ApiErrorResponse
+                {
+                    Error = "Internal server error",
+                    Details = new List<string> { "An error occurred while updating mock data" }
+                });
+            }
+        }
+
         #endregion
     }
 
@@ -392,6 +432,55 @@ namespace InterviewSchedulingBot.Controllers.Api
     {
         public string Error { get; set; } = string.Empty;
         public List<string> Details { get; set; } = new();
+    }
+
+    public class MockDataRequest
+    {
+        public List<MockUserProfile> UserProfiles { get; set; } = new();
+        public List<MockWorkingHours> WorkingHours { get; set; } = new();
+        public List<MockPresenceStatus> PresenceStatus { get; set; } = new();
+        public List<MockCalendarAvailability> CalendarAvailability { get; set; } = new();
+    }
+
+    public class MockUserProfile
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string JobTitle { get; set; } = string.Empty;
+        public string Department { get; set; } = string.Empty;
+        public string TimeZone { get; set; } = string.Empty;
+    }
+
+    public class MockWorkingHours
+    {
+        public string UserEmail { get; set; } = string.Empty;
+        public string TimeZone { get; set; } = string.Empty;
+        public List<string> DaysOfWeek { get; set; } = new();
+        public string StartTime { get; set; } = string.Empty;
+        public string EndTime { get; set; } = string.Empty;
+    }
+
+    public class MockPresenceStatus
+    {
+        public string UserEmail { get; set; } = string.Empty;
+        public string Availability { get; set; } = string.Empty;
+        public string Activity { get; set; } = string.Empty;
+        public string LastModified { get; set; } = string.Empty;
+    }
+
+    public class MockCalendarAvailability
+    {
+        public string UserEmail { get; set; } = string.Empty;
+        public List<MockBusySlot> BusySlots { get; set; } = new();
+    }
+
+    public class MockBusySlot
+    {
+        public string Start { get; set; } = string.Empty;
+        public string End { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string Subject { get; set; } = string.Empty;
     }
 
     #endregion

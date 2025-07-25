@@ -109,6 +109,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add form event listeners
     setupFormEventListeners();
+    
+    // Sync initial mock data with backend
+    syncMockDataWithBackend();
 });
 
 // Setup form event listeners
@@ -204,16 +207,16 @@ function displaySchedulingResults(result, totalParticipants) {
     const alternativeDiv = document.getElementById('alternative-slots');
     const insightsDiv = document.getElementById('business-insights');
     
-    // Show recommended slots
+    // Show recommended slots grouped by days
     if (result.recommendedSlots && result.recommendedSlots.length > 0) {
-        recommendedDiv.innerHTML = result.recommendedSlots.map(slot => createTimeSlotHtml(slot, totalParticipants)).join('');
+        recommendedDiv.innerHTML = createDayGroupedSlotsHtml(result.recommendedSlots, totalParticipants, 'Recommended');
     } else {
         recommendedDiv.innerHTML = '<p class="info-text"><i class="fas fa-info-circle"></i> No recommended slots found for the specified criteria.</p>';
     }
     
-    // Show alternative slots
+    // Show alternative slots grouped by days
     if (result.alternativeSlots && result.alternativeSlots.length > 0) {
-        alternativeDiv.innerHTML = result.alternativeSlots.map(slot => createTimeSlotHtml(slot, totalParticipants)).join('');
+        alternativeDiv.innerHTML = createDayGroupedSlotsHtml(result.alternativeSlots, totalParticipants, 'Alternative');
     } else {
         alternativeDiv.innerHTML = '<p class="info-text"><i class="fas fa-info-circle"></i> No alternative slots available.</p>';
     }
@@ -225,6 +228,111 @@ function displaySchedulingResults(result, totalParticipants) {
     
     resultsDiv.style.display = 'block';
     resultsDiv.scrollIntoView({ behavior: 'smooth' });
+}
+
+// Create HTML for slots grouped by days
+function createDayGroupedSlotsHtml(slots, totalParticipants, slotType) {
+    // Group slots by day
+    const slotsByDay = new Map();
+    
+    slots.forEach(slot => {
+        const timeSlot = slot.timeSlot || slot;
+        const startDate = new Date(timeSlot.startTime);
+        const dateKey = startDate.toDateString(); // Get date string like "Mon Jul 28 2025"
+        
+        if (!slotsByDay.has(dateKey)) {
+            slotsByDay.set(dateKey, []);
+        }
+        slotsByDay.get(dateKey).push(slot);
+    });
+    
+    // Sort days chronologically
+    const sortedDays = Array.from(slotsByDay.keys()).sort((a, b) => new Date(a) - new Date(b));
+    
+    let html = '';
+    
+    sortedDays.forEach(dateKey => {
+        const daySlots = slotsByDay.get(dateKey);
+        const firstSlot = daySlots[0];
+        const timeSlot = firstSlot.timeSlot || firstSlot;
+        const startDate = new Date(timeSlot.startTime);
+        
+        // Format date for header
+        const dateOptions = { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+        };
+        const formattedDate = startDate.toLocaleDateString('en-US', dateOptions);
+        
+        html += `
+            <div class="day-group">
+                <div class="day-header">
+                    <i class="fas fa-calendar-day"></i>
+                    <h4>${formattedDate}</h4>
+                    <span class="available-slots-count">${daySlots.length} available slot${daySlots.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div class="day-slots">
+                    ${daySlots.map(slot => createTimeSlotCardHtml(slot, totalParticipants)).join('')}
+                </div>
+            </div>
+        `;
+    });
+    
+    if (html === '') {
+        html = `<p class="info-text"><i class="fas fa-info-circle"></i> No ${slotType.toLowerCase()} slots available for the selected date range.</p>`;
+    }
+    
+    return html;
+}
+
+// Create HTML for individual time slot card
+function createTimeSlotCardHtml(slot, totalParticipants) {
+    const timeSlot = slot.timeSlot || slot;
+    const score = slot.businessScore || timeSlot.confidence || 0;
+    const reasons = slot.businessReasons || [timeSlot.reason] || [];
+    
+    const startDate = new Date(timeSlot.startTime);
+    const endDate = new Date(timeSlot.endTime);
+    
+    const timeOptions = { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+    };
+    
+    const startTime = startDate.toLocaleTimeString('en-US', timeOptions);
+    const endTime = endDate.toLocaleTimeString('en-US', timeOptions);
+    
+    // Calculate participant availability
+    const availableCount = timeSlot.availableAttendees?.length || 0;
+    const conflictingCount = timeSlot.conflictingAttendees?.length || 0;
+    const totalCount = totalParticipants || availableCount + conflictingCount;
+    
+    return `
+        <div class="time-slot-card">
+            <div class="slot-time-row">
+                <div class="slot-time">
+                    <i class="fas fa-clock"></i>
+                    <span class="time-range">${startTime} - ${endTime}</span>
+                </div>
+                <div class="slot-score">
+                    <span class="score-badge score-${getScoreClass(score)}" title="Time Slot Quality Score - Based on time of day preference, working hours alignment, and calendar availability. Higher scores indicate more optimal meeting times.">
+                        ${Math.round(score)}%
+                    </span>
+                </div>
+            </div>
+            <div class="slot-availability">
+                <i class="fas fa-users"></i>
+                <strong>Available:</strong> ${availableCount}/${totalCount} participants
+                ${conflictingCount > 0 ? `<span class="conflicted-participants">• ${conflictingCount} conflicted</span>` : ''}
+            </div>
+            <div class="slot-reasons">
+                ${reasons.map(reason => `<span class="reason-tag"><i class="fas fa-check-circle"></i>${reason}</span>`).join('')}
+            </div>
+        </div>
+    `;
 }
 
 // Create HTML for time slot
@@ -684,6 +792,7 @@ function saveUnifiedCardData(card) {
     });
     
     updateSchedulingForms();
+    syncMockDataWithBackend(); // Sync changes with backend
 }
 
 function addBusySlotUnified(userEmail) {
@@ -705,6 +814,7 @@ function addBusySlotUnified(userEmail) {
     
     calendar.busySlots.push(newSlot);
     displayUnifiedUserData();
+    syncMockDataWithBackend(); // Sync changes with backend
 }
 
 function deleteBusySlotUnified(userEmail, slotIndex) {
@@ -713,6 +823,7 @@ function deleteBusySlotUnified(userEmail, slotIndex) {
         if (calendar && calendar.busySlots[slotIndex]) {
             calendar.busySlots.splice(slotIndex, 1);
             displayUnifiedUserData();
+            syncMockDataWithBackend(); // Sync changes with backend
         }
     }
 }
@@ -826,6 +937,7 @@ function regenerateCalendarData() {
     });
     
     displayUnifiedUserData();
+    syncMockDataWithBackend(); // Sync changes with backend
     alert(`Calendar events regenerated for ${duration} days with ${density} density.`);
 }
 
@@ -896,6 +1008,61 @@ function generateRandomData() {
         displayUnifiedUserData();
         updateSchedulingForms();
         alert('Random mock data has been generated.');
+    }
+}
+
+// Function to sync frontend mock data with backend
+async function syncMockDataWithBackend() {
+    try {
+        console.log('Syncing mock data with backend...');
+        
+        const response = await fetch('/api/scheduling/update-mock-data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                userProfiles: mockData.userProfiles.map(user => ({
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    jobTitle: user.jobTitle,
+                    department: user.department,
+                    timeZone: user.timeZone
+                })),
+                workingHours: mockData.workingHours.map(wh => ({
+                    userEmail: wh.userEmail,
+                    timeZone: wh.timeZone,
+                    daysOfWeek: wh.daysOfWeek,
+                    startTime: wh.startTime,
+                    endTime: wh.endTime
+                })),
+                presenceStatus: mockData.presenceStatus.map(ps => ({
+                    userEmail: ps.userEmail,
+                    availability: ps.availability,
+                    activity: ps.activity,
+                    lastModified: ps.lastModified
+                })),
+                calendarAvailability: mockData.calendarAvailability.map(ca => ({
+                    userEmail: ca.userEmail,
+                    busySlots: ca.busySlots.map(slot => ({
+                        start: slot.start,
+                        end: slot.end,
+                        status: slot.status,
+                        subject: slot.subject
+                    }))
+                }))
+            })
+        });
+        
+        if (response.ok) {
+            console.log('Mock data synced successfully with backend');
+        } else {
+            const error = await response.json();
+            console.error('Failed to sync mock data:', error);
+        }
+    } catch (error) {
+        console.error('Error syncing mock data with backend:', error);
     }
 }
 

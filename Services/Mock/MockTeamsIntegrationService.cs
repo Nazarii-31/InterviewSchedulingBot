@@ -3,6 +3,7 @@ using Microsoft.Bot.Schema;
 using InterviewSchedulingBot.Interfaces.Integration;
 using InterviewSchedulingBot.Models;
 using Microsoft.Extensions.Logging;
+using InterviewSchedulingBot.Controllers.Api;
 
 namespace InterviewSchedulingBot.Services.Mock
 {
@@ -13,12 +14,22 @@ namespace InterviewSchedulingBot.Services.Mock
     public class MockTeamsIntegrationService : ITeamsIntegrationService
     {
         private readonly ILogger<MockTeamsIntegrationService> _logger;
-        private readonly MockDataProvider _mockDataProvider;
+        private MockDataProvider _mockDataProvider;
 
         public MockTeamsIntegrationService(ILogger<MockTeamsIntegrationService> logger)
         {
             _logger = logger;
             _mockDataProvider = new MockDataProvider();
+        }
+
+        /// <summary>
+        /// Update mock data for testing (allows frontend to sync with backend)
+        /// </summary>
+        public async Task UpdateMockDataAsync(MockDataRequest newMockData)
+        {
+            _logger.LogInformation("[MOCK] Updating mock data with {UserCount} users", newMockData.UserProfiles.Count);
+            await Task.Delay(50); // Simulate processing delay
+            _mockDataProvider.UpdateData(newMockData);
         }
 
         public async Task<ResourceResponse> SendMessageAsync(ITurnContext turnContext, string message)
@@ -111,6 +122,12 @@ namespace InterviewSchedulingBot.Services.Mock
     public class MockDataProvider
     {
         private readonly Random _random = new Random();
+        private MockDataRequest? _customMockData;
+
+        public void UpdateData(MockDataRequest newMockData)
+        {
+            _customMockData = newMockData;
+        }
 
         public TeamsUserInfo GetMockTeamsUserInfo()
         {
@@ -157,7 +174,35 @@ namespace InterviewSchedulingBot.Services.Mock
             {
                 var busySlots = new List<BusyTimeSlot>();
 
-                // Generate realistic busy time patterns for the entire date range
+                // Use custom mock data if available
+                if (_customMockData != null)
+                {
+                    var userCalendar = _customMockData.CalendarAvailability.FirstOrDefault(ca => ca.UserEmail == userEmail);
+                    if (userCalendar != null)
+                    {
+                        foreach (var slot in userCalendar.BusySlots)
+                        {
+                            if (DateTime.TryParse(slot.Start, out var start) && DateTime.TryParse(slot.End, out var end))
+                            {
+                                // Only include slots that overlap with the requested time range
+                                if (start < endTime && end > startTime)
+                                {
+                                    busySlots.Add(new BusyTimeSlot
+                                    {
+                                        Start = start,
+                                        End = end,
+                                        Status = slot.Status,
+                                        Subject = slot.Subject
+                                    });
+                                }
+                            }
+                        }
+                        result[userEmail] = busySlots.OrderBy(slot => slot.Start).ToList();
+                        continue;
+                    }
+                }
+
+                // Fallback to generated realistic busy time patterns
                 var currentDate = startTime.Date;
                 while (currentDate <= endTime.Date)
                 {
@@ -210,7 +255,23 @@ namespace InterviewSchedulingBot.Services.Mock
 
         public WorkingHours GetMockWorkingHours(string userEmail)
         {
-            // Simulate different working hour patterns
+            // Use custom mock data if available
+            if (_customMockData != null)
+            {
+                var customWorkingHours = _customMockData.WorkingHours.FirstOrDefault(wh => wh.UserEmail == userEmail);
+                if (customWorkingHours != null)
+                {
+                    return new WorkingHours
+                    {
+                        TimeZone = customWorkingHours.TimeZone,
+                        DaysOfWeek = customWorkingHours.DaysOfWeek,
+                        StartTime = customWorkingHours.StartTime,
+                        EndTime = customWorkingHours.EndTime
+                    };
+                }
+            }
+
+            // Fallback to simulated different working hour patterns
             var workingHourPatterns = new[]
             {
                 new WorkingHours

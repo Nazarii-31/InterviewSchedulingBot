@@ -1191,3 +1191,161 @@ footer {
         justify-content: space-between;
     }
 }
+
+/* Day-grouped slots styles */
+.day-group {
+    margin-bottom: 30px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    background: white;
+    box-shadow: var(--shadow);
+}
+
+.day-header {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.day-header i {
+    font-size: 1.2rem;
+}
+
+.day-header h4 {
+    margin: 0;
+    flex: 1;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.available-slots-count {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.day-slots {
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.time-slot-card {
+    background: #f8f9fa;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 16px;
+    transition: var(--transition);
+}
+
+.time-slot-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border-color: var(--primary-color);
+}
+
+.slot-time-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.slot-time {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.slot-time i {
+    color: var(--primary-color);
+}
+
+.time-range {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    padding: 6px 12px;
+    border-radius: var(--border-radius);
+    border: 1px solid #90caf9;
+}
+
+.slot-availability {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    color: var(--text-secondary);
+}
+
+.slot-availability i {
+    color: var(--accent-color);
+}
+
+.conflicted-participants {
+    color: var(--danger-color);
+    font-weight: 500;
+    margin-left: 8px;
+}
+
+.slot-reasons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+/* Enhanced reason tags */
+.reason-tag {
+    background: linear-gradient(135deg, var(--accent-color) 0%, #20c997 100%);
+    color: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
+}
+
+.reason-tag i {
+    font-size: 0.8rem;
+}
+
+/* Responsive improvements for day-grouped layout */
+@media (max-width: 768px) {
+    .day-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .available-slots-count {
+        align-self: flex-end;
+    }
+    
+    .slot-time-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .slot-time {
+        font-size: 1rem;
+    }
+    
+    .time-range {
+        padding: 4px 8px;
+        font-size: 0.9rem;
+    }
+}
+}
