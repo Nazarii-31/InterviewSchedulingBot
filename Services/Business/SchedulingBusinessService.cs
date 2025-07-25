@@ -329,9 +329,16 @@ namespace InterviewSchedulingBot.Services.Business
                 workingHoursMap[email] = workingHours;
             }
 
+            // Also get organizer's working hours (first participant is typically the organizer)
+            string organizerEmail = request.ParticipantEmails.FirstOrDefault() ?? "";
+            WorkingHours? organizerWorkingHours = null;
+            if (!string.IsNullOrEmpty(organizerEmail) && workingHoursMap.ContainsKey(organizerEmail))
+            {
+                organizerWorkingHours = workingHoursMap[organizerEmail];
+            }
+
             // Find available slots for each weekday in the date range
             var currentDate = request.EarliestDate.Date;
-            var dailySlots = new Dictionary<DateTime, List<BusinessRankedTimeSlot>>();
 
             while (currentDate <= request.LatestDate.Date)
             {
@@ -342,19 +349,23 @@ namespace InterviewSchedulingBot.Services.Business
                     continue;
                 }
 
-                var daySlots = FindAvailableSlotsForDay(currentDate, request, calendarAvailability, workingHoursMap);
+                var daySlots = FindAvailableSlotsForDay(currentDate, request, calendarAvailability, workingHoursMap, organizerWorkingHours);
                 if (daySlots.Any())
                 {
-                    dailySlots[currentDate] = daySlots;
-                    // Include ALL available slots for each day - no limit
-                    recommendations.AddRange(daySlots); 
+                    // Only include the BEST 2-3 slots per day (not all slots)
+                    var bestDaySlots = daySlots
+                        .OrderByDescending(s => s.BusinessScore)
+                        .ThenBy(s => s.TimeSlot.StartTime)
+                        .Take(3) // Maximum 3 slots per day
+                        .ToList();
+                    
+                    recommendations.AddRange(bestDaySlots);
                 }
 
                 currentDate = currentDate.AddDays(1);
             }
 
-            // Sort by start time chronologically, then by business score for same time
-            // Return ALL slots, not just limited to 15
+            // Sort by start time chronologically, then by business score
             return recommendations.OrderBy(r => r.TimeSlot.StartTime).ThenByDescending(r => r.BusinessScore).ToList();
         }
 
@@ -374,6 +385,14 @@ namespace InterviewSchedulingBot.Services.Business
                 workingHoursMap[email] = workingHours;
             }
 
+            // Also get organizer's working hours
+            string organizerEmail = request.ParticipantEmails.FirstOrDefault() ?? "";
+            WorkingHours? organizerWorkingHours = null;
+            if (!string.IsNullOrEmpty(organizerEmail) && workingHoursMap.ContainsKey(organizerEmail))
+            {
+                organizerWorkingHours = workingHoursMap[organizerEmail];
+            }
+
             var alternatives = new List<BusinessRankedTimeSlot>();
             var currentDate = request.EarliestDate.Date;
 
@@ -386,11 +405,17 @@ namespace InterviewSchedulingBot.Services.Business
                     continue;
                 }
 
-                // Include ALL alternative slots for comprehensive view
-                var allDaySlots = FindAvailableSlotsForDay(currentDate, request, calendarAvailability, workingHoursMap)
-                    .OrderBy(slot => slot.TimeSlot.StartTime); // Sort by time
+                // Get ALL alternative slots for this day
+                var allDaySlots = FindAvailableSlotsForDay(currentDate, request, calendarAvailability, workingHoursMap, organizerWorkingHours);
 
-                foreach (var slot in allDaySlots)
+                // For alternatives, take the best 2 slots per day (fewer than recommendations)
+                var bestAlternatives = allDaySlots
+                    .OrderByDescending(slot => slot.BusinessScore)
+                    .ThenBy(slot => slot.TimeSlot.StartTime)
+                    .Take(2) // Maximum 2 alternative slots per day
+                    .ToList();
+
+                foreach (var slot in bestAlternatives)
                 {
                     slot.BusinessReasons.Add("Alternative option");
                     slot.BusinessScore *= 0.9; // Slightly lower score for alternatives
@@ -534,27 +559,52 @@ namespace InterviewSchedulingBot.Services.Business
             DateTime date, 
             SchedulingBusinessRequest request, 
             Dictionary<string, List<BusyTimeSlot>> calendarAvailability,
-            Dictionary<string, WorkingHours> workingHoursMap)
+            Dictionary<string, WorkingHours> workingHoursMap,
+            WorkingHours? organizerWorkingHours = null)
         {
             var slots = new List<BusinessRankedTimeSlot>();
             
-            // Determine working hours for this day (use earliest start and latest end)
+            // Determine working hours for this day - prioritize organizer's working hours
             var dayWorkingStart = TimeSpan.FromHours(9); // Default 9 AM
             var dayWorkingEnd = TimeSpan.FromHours(17);   // Default 5 PM
             
-            foreach (var workingHours in workingHoursMap.Values)
+            // First, check organizer's working hours if available
+            if (organizerWorkingHours != null && organizerWorkingHours.DaysOfWeek.Contains(date.DayOfWeek.ToString()))
             {
-                if (workingHours.DaysOfWeek.Contains(date.DayOfWeek.ToString()))
+                if (TimeSpan.TryParse(organizerWorkingHours.StartTime, out var orgStart))
                 {
-                    if (TimeSpan.TryParse(workingHours.StartTime, out var start))
+                    dayWorkingStart = orgStart;
+                }
+                if (TimeSpan.TryParse(organizerWorkingHours.EndTime, out var orgEnd))
+                {
+                    dayWorkingEnd = orgEnd;
+                }
+            }
+            else
+            {
+                // If no organizer working hours, find the intersection of all participants' working hours
+                foreach (var workingHours in workingHoursMap.Values)
+                {
+                    if (workingHours.DaysOfWeek.Contains(date.DayOfWeek.ToString()))
                     {
-                        if (start < dayWorkingStart) dayWorkingStart = start;
-                    }
-                    if (TimeSpan.TryParse(workingHours.EndTime, out var end))
-                    {
-                        if (end > dayWorkingEnd) dayWorkingEnd = end;
+                        if (TimeSpan.TryParse(workingHours.StartTime, out var start))
+                        {
+                            if (start > dayWorkingStart) dayWorkingStart = start; // Use latest start time
+                        }
+                        if (TimeSpan.TryParse(workingHours.EndTime, out var end))
+                        {
+                            if (end < dayWorkingEnd) dayWorkingEnd = end; // Use earliest end time
+                        }
                     }
                 }
+            }
+
+            // Ensure we have valid working hours
+            if (dayWorkingStart >= dayWorkingEnd)
+            {
+                _logger.LogWarning("Invalid working hours for {Date}: start {Start} >= end {End}", 
+                    date.ToString("yyyy-MM-dd"), dayWorkingStart, dayWorkingEnd);
+                return slots; // Return empty if no valid working hours
             }
 
             // Create time slots every 30 minutes during working hours
@@ -614,9 +664,9 @@ namespace InterviewSchedulingBot.Services.Business
                 var baseScore = CalculateTimeSlotBusinessScore(currentTime, request.DurationMinutes);
                 var adjustedScore = baseScore * availabilityRatio;
 
-                // Include ALL slots that have at least some participants available
-                // Don't filter out partially available slots - let the user see all options
-                if (availableParticipants.Count > 0)
+                // Include slots that have at least some participants available
+                // Prioritize slots with higher availability ratios
+                if (availableParticipants.Count > 0 && availabilityRatio >= 0.5) // At least 50% availability
                 {
                     var reasons = GenerateSlotReasons(currentTime, availableParticipants.Count, request.ParticipantEmails.Count);
 
@@ -642,8 +692,8 @@ namespace InterviewSchedulingBot.Services.Business
                 currentTime = currentTime.AddMinutes(30);
             }
 
-            // Return more slots per day to increase variety
-            return slots.OrderBy(s => s.TimeSlot.StartTime).ThenByDescending(s => s.BusinessScore).ToList();
+            // Return slots sorted by score and time
+            return slots.OrderByDescending(s => s.BusinessScore).ThenBy(s => s.TimeSlot.StartTime).ToList();
         }
 
         private double CalculateTimeSlotBusinessScore(DateTime startTime, int durationMinutes)
