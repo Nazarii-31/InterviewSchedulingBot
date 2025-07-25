@@ -139,7 +139,7 @@ function setupFormEventListeners() {
         
         try {
             const result = await makeApiCall('find-optimal-slots', requestData);
-            displaySchedulingResults(result);
+            displaySchedulingResults(result, participants.length);
         } catch (error) {
             displayError('scheduling-results', 'Failed to find optimal slots: ' + error.message);
         }
@@ -198,7 +198,7 @@ function setupFormEventListeners() {
 }
 
 // Display scheduling results
-function displaySchedulingResults(result) {
+function displaySchedulingResults(result, totalParticipants) {
     const resultsDiv = document.getElementById('scheduling-results');
     const recommendedDiv = document.getElementById('recommended-slots');
     const alternativeDiv = document.getElementById('alternative-slots');
@@ -206,14 +206,14 @@ function displaySchedulingResults(result) {
     
     // Show recommended slots
     if (result.recommendedSlots && result.recommendedSlots.length > 0) {
-        recommendedDiv.innerHTML = result.recommendedSlots.map(slot => createTimeSlotHtml(slot)).join('');
+        recommendedDiv.innerHTML = result.recommendedSlots.map(slot => createTimeSlotHtml(slot, totalParticipants)).join('');
     } else {
         recommendedDiv.innerHTML = '<p class="info-text"><i class="fas fa-info-circle"></i> No recommended slots found for the specified criteria.</p>';
     }
     
     // Show alternative slots
     if (result.alternativeSlots && result.alternativeSlots.length > 0) {
-        alternativeDiv.innerHTML = result.alternativeSlots.map(slot => createTimeSlotHtml(slot)).join('');
+        alternativeDiv.innerHTML = result.alternativeSlots.map(slot => createTimeSlotHtml(slot, totalParticipants)).join('');
     } else {
         alternativeDiv.innerHTML = '<p class="info-text"><i class="fas fa-info-circle"></i> No alternative slots available.</p>';
     }
@@ -228,7 +228,7 @@ function displaySchedulingResults(result) {
 }
 
 // Create HTML for time slot
-function createTimeSlotHtml(slot) {
+function createTimeSlotHtml(slot, totalParticipants) {
     const timeSlot = slot.timeSlot || slot;
     const score = slot.businessScore || timeSlot.confidence || 0;
     const reasons = slot.businessReasons || [timeSlot.reason] || [];
@@ -253,6 +253,10 @@ function createTimeSlotHtml(slot) {
     const startTime = startDate.toLocaleTimeString('en-US', timeOptions);
     const endTime = endDate.toLocaleTimeString('en-US', timeOptions);
     
+    // Calculate participant availability
+    const availableCount = timeSlot.availableAttendees?.length || 0;
+    const totalCount = totalParticipants || availableCount + (timeSlot.conflictingAttendees?.length || 0);
+    
     return `
         <div class="time-slot-card enhanced">
             <div class="slot-date-header">
@@ -265,13 +269,15 @@ function createTimeSlotHtml(slot) {
                     <span class="time-range">${startTime} - ${endTime}</span>
                 </div>
                 <div class="slot-score">
-                    <span class="score-badge score-${getScoreClass(score)}">${Math.round(score)}%</span>
+                    <span class="score-badge score-${getScoreClass(score)}" title="Time Slot Quality Score - Based on time of day preference, working hours alignment, and calendar availability. Higher scores indicate more optimal meeting times.">
+                        ${Math.round(score)}%
+                    </span>
                 </div>
             </div>
             <div class="slot-details">
                 <div class="slot-availability">
                     <i class="fas fa-users"></i>
-                    <strong>Available:</strong> ${timeSlot.availableAttendees?.length || 0}/${(timeSlot.availableAttendees?.length || 0) + (timeSlot.conflictingAttendees?.length || 0)} participants
+                    <strong>Available:</strong> ${availableCount}/${totalCount} participants
                 </div>
                 <div class="slot-reasons">
                     ${reasons.map(reason => `<span class="reason-tag"><i class="fas fa-check-circle"></i>${reason}</span>`).join('')}

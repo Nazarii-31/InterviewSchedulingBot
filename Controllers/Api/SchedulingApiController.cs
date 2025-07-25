@@ -197,7 +197,9 @@ namespace InterviewSchedulingBot.Controllers.Api
                     EndTime = slot.TimeSlot.EndTime,
                     BusinessScore = slot.BusinessScore,
                     Confidence = slot.TimeSlot.Confidence,
-                    Reasons = slot.BusinessReasons
+                    Reasons = slot.BusinessReasons,
+                    AvailableAttendees = slot.TimeSlot.AvailableAttendees,
+                    ConflictingAttendees = slot.TimeSlot.ConflictingAttendees
                 }).ToList(),
                 AlternativeSlots = businessResult.AlternativeSlots.Select(slot => new ApiTimeSlot
                 {
@@ -205,7 +207,9 @@ namespace InterviewSchedulingBot.Controllers.Api
                     EndTime = slot.TimeSlot.EndTime,
                     BusinessScore = slot.BusinessScore,
                     Confidence = slot.TimeSlot.Confidence,
-                    Reasons = slot.BusinessReasons
+                    Reasons = slot.BusinessReasons,
+                    AvailableAttendees = slot.TimeSlot.AvailableAttendees,
+                    ConflictingAttendees = slot.TimeSlot.ConflictingAttendees
                 }).ToList(),
                 RecommendationReasoning = businessResult.RecommendationReasoning,
                 Insights = new ApiBusinessInsights
@@ -312,6 +316,8 @@ namespace InterviewSchedulingBot.Controllers.Api
         public double BusinessScore { get; set; }
         public double Confidence { get; set; }
         public List<string> Reasons { get; set; } = new();
+        public List<string> AvailableAttendees { get; set; } = new();
+        public List<string> ConflictingAttendees { get; set; } = new();
     }
 
     public class ApiBusinessInsights

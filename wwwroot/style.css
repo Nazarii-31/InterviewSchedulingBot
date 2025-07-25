@@ -229,6 +229,35 @@ textarea {
     padding-bottom: 10px;
 }
 
+/* Results Legend */
+.results-legend {
+    background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+    border: 1px solid #bbdefb;
+    border-radius: var(--border-radius);
+    padding: 15px;
+    margin-bottom: 25px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.legend-item i {
+    color: var(--primary-color);
+    font-size: 1rem;
+}
+
+.legend-item strong {
+    color: var(--primary-dark);
+}
+
 /* Time Slot Cards */
 .time-slot {
     background: var(--secondary-color);
