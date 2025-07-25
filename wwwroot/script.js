@@ -99,37 +99,103 @@ function parseEmailList(emailText) {
         .filter(email => email.length > 0);
 }
 
-// Find Optimal Slots functionality
-document.getElementById('scheduling-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
+// Initialize the application
+document.addEventListener('DOMContentLoaded', function() {
+    initializeDates();
+    initializeMockData();
     
-    const participants = parseEmailList(document.getElementById('participants').value);
-    const duration = parseInt(document.getElementById('duration').value);
-    const earliestDate = new Date(document.getElementById('earliest-date').value);
-    const latestDate = new Date(document.getElementById('latest-date').value);
-    const interviewType = document.getElementById('interview-type').value;
-    const priority = document.getElementById('priority').value;
-    const requesterId = document.getElementById('requester-id').value;
-    const department = document.getElementById('department').value;
+    // Show the first tab by default
+    document.querySelector('.tab-button').click();
     
-    const requestData = {
-        participantEmails: participants,
-        durationMinutes: duration,
-        earliestDate: earliestDate.toISOString(),
-        latestDate: latestDate.toISOString(),
-        interviewType: interviewType,
-        priority: priority,
-        requesterId: requesterId || null,
-        department: department || null
-    };
-    
-    try {
-        const result = await makeApiCall('find-optimal-slots', requestData);
-        displaySchedulingResults(result);
-    } catch (error) {
-        displayError('scheduling-results', 'Failed to find optimal slots: ' + error.message);
-    }
+    // Add form event listeners
+    setupFormEventListeners();
 });
+
+// Setup form event listeners
+function setupFormEventListeners() {
+    // Find Optimal Slots functionality
+    document.getElementById('scheduling-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const participants = parseEmailList(document.getElementById('participants').value);
+        const duration = parseInt(document.getElementById('duration').value);
+        const earliestDate = new Date(document.getElementById('earliest-date').value);
+        const latestDate = new Date(document.getElementById('latest-date').value);
+        const interviewType = document.getElementById('interview-type').value;
+        const priority = document.getElementById('priority').value;
+        const requesterId = document.getElementById('requester-id').value;
+        const department = document.getElementById('department').value;
+        
+        const requestData = {
+            participantEmails: participants,
+            durationMinutes: duration,
+            earliestDate: earliestDate.toISOString(),
+            latestDate: latestDate.toISOString(),
+            interviewType: interviewType,
+            priority: priority,
+            requesterId: requesterId || null,
+            department: department || null
+        };
+        
+        try {
+            const result = await makeApiCall('find-optimal-slots', requestData);
+            displaySchedulingResults(result);
+        } catch (error) {
+            displayError('scheduling-results', 'Failed to find optimal slots: ' + error.message);
+        }
+    });
+
+    // Validation functionality
+    document.getElementById('validation-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const participants = parseEmailList(document.getElementById('val-participants').value);
+        const duration = parseInt(document.getElementById('val-duration').value);
+        const earliestDate = new Date(document.getElementById('val-earliest').value);
+        const latestDate = new Date(document.getElementById('val-latest').value);
+        const interviewType = document.getElementById('val-type').value;
+        
+        const requestData = {
+            participantEmails: participants,
+            durationMinutes: duration,
+            earliestDate: earliestDate.toISOString(),
+            latestDate: latestDate.toISOString(),
+            interviewType: interviewType,
+            priority: 'Normal'
+        };
+        
+        try {
+            const result = await makeApiCall('validate', requestData);
+            displayValidationResults(result);
+        } catch (error) {
+            displayError('validation-results', 'Failed to validate request: ' + error.message);
+        }
+    });
+
+    // Conflict Analysis functionality
+    document.getElementById('conflict-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const participants = parseEmailList(document.getElementById('conflict-participants').value);
+        const proposedTime = new Date(document.getElementById('proposed-time').value);
+        const duration = parseInt(document.getElementById('conflict-duration').value);
+        const accessToken = document.getElementById('access-token').value;
+        
+        const requestData = {
+            proposedTime: proposedTime.toISOString(),
+            duration: duration,
+            participantEmails: participants,
+            accessToken: accessToken
+        };
+        
+        try {
+            const result = await makeApiCall('analyze-conflicts', requestData);
+            displayConflictResults(result);
+        } catch (error) {
+            displayError('conflict-results', 'Failed to analyze conflicts: ' + error.message);
+        }
+    });
+}
 
 // Display scheduling results
 function displaySchedulingResults(result) {
@@ -157,332 +223,83 @@ function displaySchedulingResults(result) {
         insightsDiv.innerHTML = createBusinessInsightsHtml(result.insights);
     }
     
-    // Show reasoning if available
-    if (result.recommendationReasoning) {
-        const reasoningDiv = document.createElement('div');
-        reasoningDiv.className = 'insight-card';
-        reasoningDiv.innerHTML = `
-            <h4><i class="fas fa-brain"></i> Recommendation Reasoning</h4>
-            <p>${result.recommendationReasoning}</p>
-        `;
-        insightsDiv.appendChild(reasoningDiv);
-    }
-    
     resultsDiv.style.display = 'block';
     resultsDiv.scrollIntoView({ behavior: 'smooth' });
 }
 
-// Create time slot HTML
+// Create HTML for time slot
 function createTimeSlotHtml(slot) {
-    const startTime = new Date(slot.startTime).toLocaleString();
-    const endTime = new Date(slot.endTime).toLocaleString();
-    const businessScore = (slot.businessScore * 100).toFixed(1);
-    const confidence = (slot.confidence * 100).toFixed(1);
-    
-    const reasonsHtml = slot.reasons && slot.reasons.length > 0 
-        ? `<div class="slot-reasons">
-             <strong>Reasons:</strong>
-             <ul>${slot.reasons.map(reason => `<li>${reason}</li>`).join('')}</ul>
-           </div>`
-        : '';
+    const timeSlot = slot.timeSlot || slot;
+    const score = slot.businessScore || timeSlot.confidence || 0;
+    const reasons = slot.businessReasons || [timeSlot.reason] || [];
     
     return `
-        <div class="time-slot">
-            <div class="slot-time">
-                <i class="fas fa-clock"></i> ${startTime} - ${endTime}
+        <div class="time-slot-card">
+            <div class="slot-header">
+                <div class="slot-time">
+                    <i class="fas fa-clock"></i>
+                    ${new Date(timeSlot.startTime).toLocaleString()} - ${new Date(timeSlot.endTime).toLocaleString()}
+                </div>
+                <div class="slot-score">
+                    <span class="score-badge score-${getScoreClass(score)}">${Math.round(score)}%</span>
+                </div>
             </div>
-            <div class="slot-score">
-                <span class="score-badge">Score: ${businessScore}%</span>
-                <span class="confidence-badge">Confidence: ${confidence}%</span>
+            <div class="slot-details">
+                <div class="slot-reasons">
+                    ${reasons.map(reason => `<span class="reason-tag">${reason}</span>`).join('')}
+                </div>
+                <div class="slot-participants">
+                    <strong>Available:</strong> ${timeSlot.availableAttendees?.length || 0}/${timeSlot.availableAttendees?.length + timeSlot.conflictingAttendees?.length || 0} participants
+                </div>
             </div>
-            ${reasonsHtml}
         </div>
     `;
+}
+
+// Get score class for styling
+function getScoreClass(score) {
+    if (score >= 90) return 'excellent';
+    if (score >= 75) return 'good';
+    if (score >= 60) return 'fair';
+    return 'poor';
 }
 
 // Create business insights HTML
 function createBusinessInsightsHtml(insights) {
-    const avgAvailability = (insights.averageAvailability * 100).toFixed(1);
-    
     return `
-        <div class="insights-grid">
+        <div class="insights-container">
             <div class="insight-card">
-                <h4><i class="fas fa-chart-line"></i> Availability Overview</h4>
-                <p>Average Availability: <strong>${avgAvailability}%</strong></p>
+                <h4><i class="fas fa-chart-line"></i> Average Availability</h4>
+                <p>${insights.averageAvailability?.toFixed(1)}%</p>
             </div>
             
-            ${insights.bestTimeWindows && insights.bestTimeWindows.length > 0 ? `
             <div class="insight-card">
                 <h4><i class="fas fa-clock"></i> Best Time Windows</h4>
                 <ul>
-                    ${insights.bestTimeWindows.map(window => `<li>${window}</li>`).join('')}
+                    ${insights.bestTimeWindows?.map(window => `<li>${window}</li>`).join('') || '<li>No data available</li>'}
                 </ul>
             </div>
-            ` : ''}
             
-            ${insights.challengingPeriods && insights.challengingPeriods.length > 0 ? `
-            <div class="insight-card">
-                <h4><i class="fas fa-exclamation-triangle"></i> Challenging Periods</h4>
-                <ul>
-                    ${insights.challengingPeriods.map(period => `<li>${period}</li>`).join('')}
-                </ul>
-            </div>
-            ` : ''}
-            
-            ${insights.schedulingTips && insights.schedulingTips.length > 0 ? `
             <div class="insight-card">
                 <h4><i class="fas fa-lightbulb"></i> Scheduling Tips</h4>
                 <ul>
-                    ${insights.schedulingTips.map(tip => `<li>${tip}</li>`).join('')}
+                    ${insights.schedulingTips?.map(tip => `<li>${tip}</li>`).join('') || '<li>No tips available</li>'}
                 </ul>
             </div>
+            
+            ${insights.challengingPeriods?.length ? `
+                <div class="insight-card">
+                    <h4><i class="fas fa-exclamation-triangle"></i> Challenging Periods</h4>
+                    <ul>
+                        ${insights.challengingPeriods.map(period => `<li>${period}</li>`).join('')}
+                    </ul>
+                </div>
             ` : ''}
         </div>
     `;
 }
 
-// Validation functionality
-document.getElementById('validation-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const participants = parseEmailList(document.getElementById('val-participants').value);
-    const duration = parseInt(document.getElementById('val-duration').value);
-    const earliestDate = new Date(document.getElementById('val-earliest').value);
-    const latestDate = new Date(document.getElementById('val-latest').value);
-    const interviewType = document.getElementById('val-type').value;
-    
-    const requestData = {
-        participantEmails: participants,
-        durationMinutes: duration,
-        earliestDate: earliestDate.toISOString(),
-        latestDate: latestDate.toISOString(),
-        interviewType: interviewType,
-        priority: 'Normal'
-    };
-    
-    try {
-        const result = await makeApiCall('validate', requestData);
-        displayValidationResults(result);
-    } catch (error) {
-        displayError('validation-results', 'Validation failed: ' + error.message);
-    }
-});
-
-// Display validation results
-function displayValidationResults(result) {
-    const resultsDiv = document.getElementById('validation-results');
-    const statusDiv = document.getElementById('validation-status');
-    const errorsDiv = document.getElementById('validation-errors');
-    const warningsDiv = document.getElementById('validation-warnings');
-    const suggestionsDiv = document.getElementById('validation-suggestions');
-    
-    // Clear previous results
-    statusDiv.innerHTML = '';
-    errorsDiv.innerHTML = '';
-    warningsDiv.innerHTML = '';
-    suggestionsDiv.innerHTML = '';
-    
-    // Show validation status
-    if (result.isValid) {
-        statusDiv.innerHTML = `
-            <div class="status-badge status-success">
-                <i class="fas fa-check-circle"></i>
-                Validation Successful - Request is valid
-            </div>
-        `;
-    } else {
-        statusDiv.innerHTML = `
-            <div class="status-badge status-error">
-                <i class="fas fa-times-circle"></i>
-                Validation Failed - Please fix the errors below
-            </div>
-        `;
-    }
-    
-    // Show errors
-    if (result.errors && result.errors.length > 0) {
-        errorsDiv.innerHTML = `
-            <h4><i class="fas fa-times-circle"></i> Errors</h4>
-            ${result.errors.map(error => `
-                <div class="error-item">
-                    <i class="fas fa-times"></i>
-                    <div>
-                        <strong>${error.code}:</strong> ${error.message}
-                        ${error.field ? `<br><small>Field: ${error.field}</small>` : ''}
-                    </div>
-                </div>
-            `).join('')}
-        `;
-    }
-    
-    // Show warnings
-    if (result.warnings && result.warnings.length > 0) {
-        warningsDiv.innerHTML = `
-            <h4><i class="fas fa-exclamation-triangle"></i> Warnings</h4>
-            ${result.warnings.map(warning => `
-                <div class="warning-item">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <div>
-                        <strong>${warning.code}:</strong> ${warning.message}
-                        ${warning.suggestion ? `<br><small>Suggestion: ${warning.suggestion}</small>` : ''}
-                        ${warning.field ? `<br><small>Field: ${warning.field}</small>` : ''}
-                    </div>
-                </div>
-            `).join('')}
-        `;
-    }
-    
-    // Show suggestions
-    if (result.suggestions && result.suggestions.length > 0) {
-        suggestionsDiv.innerHTML = `
-            <h4><i class="fas fa-lightbulb"></i> Suggestions</h4>
-            <ul>
-                ${result.suggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
-            </ul>
-        `;
-    }
-    
-    resultsDiv.style.display = 'block';
-    resultsDiv.scrollIntoView({ behavior: 'smooth' });
-}
-
-// Conflict Analysis functionality
-document.getElementById('conflict-form').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    
-    const participants = parseEmailList(document.getElementById('conflict-participants').value);
-    const proposedTime = new Date(document.getElementById('proposed-time').value);
-    const duration = parseInt(document.getElementById('conflict-duration').value);
-    const accessToken = document.getElementById('access-token').value;
-    
-    const requestData = {
-        participantEmails: participants,
-        proposedTime: proposedTime.toISOString(),
-        durationMinutes: duration,
-        accessToken: accessToken
-    };
-    
-    try {
-        const result = await makeApiCall('analyze-conflicts', requestData);
-        displayConflictResults(result);
-    } catch (error) {
-        displayError('conflict-results', 'Conflict analysis failed: ' + error.message);
-    }
-});
-
-// Display conflict analysis results
-function displayConflictResults(result) {
-    const resultsDiv = document.getElementById('conflict-results');
-    const statusDiv = document.getElementById('conflict-status');
-    const detailsDiv = document.getElementById('conflict-details');
-    
-    // Clear previous results
-    statusDiv.innerHTML = '';
-    detailsDiv.innerHTML = '';
-    
-    // Show conflict status
-    if (result.hasConflicts) {
-        statusDiv.innerHTML = `
-            <div class="status-badge status-error">
-                <i class="fas fa-exclamation-triangle"></i>
-                Conflicts Detected - ${result.impactLevel} Impact
-            </div>
-        `;
-    } else {
-        statusDiv.innerHTML = `
-            <div class="status-badge status-success">
-                <i class="fas fa-check-circle"></i>
-                No Conflicts Found
-            </div>
-        `;
-    }
-    
-    // Show impact description
-    if (result.impactDescription) {
-        detailsDiv.innerHTML += `
-            <div class="insight-card">
-                <h4><i class="fas fa-info-circle"></i> Impact Analysis</h4>
-                <p>${result.impactDescription}</p>
-            </div>
-        `;
-    }
-    
-    // Show affected participants
-    if (result.affectedParticipants && result.affectedParticipants.length > 0) {
-        detailsDiv.innerHTML += `
-            <div class="insight-card">
-                <h4><i class="fas fa-users"></i> Affected Participants</h4>
-                <ul>
-                    ${result.affectedParticipants.map(participant => `<li>${participant}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-    
-    // Show mitigation suggestions
-    if (result.mitigationSuggestions && result.mitigationSuggestions.length > 0) {
-        detailsDiv.innerHTML += `
-            <div class="insight-card">
-                <h4><i class="fas fa-lightbulb"></i> Mitigation Suggestions</h4>
-                <ul>
-                    ${result.mitigationSuggestions.map(suggestion => `<li>${suggestion}</li>`).join('')}
-                </ul>
-            </div>
-        `;
-    }
-    
-    // Show detailed conflicts
-    if (result.conflicts && result.conflicts.length > 0) {
-        const conflictsHtml = result.conflicts.map(conflict => `
-            <div class="conflict-card">
-                <div class="conflict-header">
-                    <strong>${conflict.participantEmail}</strong>
-                    <span class="severity-badge severity-${conflict.severity.toLowerCase()}">
-                        ${conflict.severity}
-                    </span>
-                </div>
-                <p><strong>Type:</strong> ${conflict.type}</p>
-                <p><strong>Time:</strong> ${new Date(conflict.conflictStart).toLocaleString()} - ${new Date(conflict.conflictEnd).toLocaleString()}</p>
-                ${conflict.description ? `<p><strong>Description:</strong> ${conflict.description}</p>` : ''}
-                <p><strong>Can be resolved:</strong> ${conflict.canBeResolved ? 'Yes' : 'No'}</p>
-            </div>
-        `).join('');
-        
-        detailsDiv.innerHTML += `
-            <div class="insight-card">
-                <h4><i class="fas fa-exclamation-triangle"></i> Detailed Conflicts</h4>
-                ${conflictsHtml}
-            </div>
-        `;
-    }
-    
-    resultsDiv.style.display = 'block';
-    resultsDiv.scrollIntoView({ behavior: 'smooth' });
-}
-
-// Display error message
-function displayError(containerId, message) {
-    const container = document.getElementById(containerId);
-    container.innerHTML = `
-        <div class="status-badge status-error">
-            <i class="fas fa-exclamation-triangle"></i>
-            ${message}
-        </div>
-    `;
-    container.style.display = 'block';
-    container.scrollIntoView({ behavior: 'smooth' });
-}
-
-// Initialize the application
-document.addEventListener('DOMContentLoaded', function() {
-    initializeDates();
-    initializeMockData();
-    
-    // Show the first tab by default
-    document.querySelector('.tab-button').click();
-});
-
-// Mock Data Management
+// Mock Data Section
 let mockData = {
     userProfiles: [
         {
@@ -610,6 +427,8 @@ function initializeMockData() {
 // Display unified user data
 function displayUnifiedUserData() {
     const container = document.getElementById('unified-user-data');
+    if (!container) return; // Exit if container doesn't exist
+    
     const html = mockData.userProfiles.map(user => {
         // Find corresponding working hours, presence, and calendar data
         const workingHours = mockData.workingHours.find(wh => wh.userEmail === user.email) || {};
@@ -664,15 +483,6 @@ function displayUnifiedUserData() {
                     <!-- Working Hours -->
                     <div class="user-section">
                         <h5><i class="fas fa-clock"></i> Working Hours</h5>
-                        <div class="data-row">
-                            <span class="field-label">Time Zone:</span>
-                            <select class="field-value editable-select" data-field="timeZone" data-section="workingHours">
-                                <option value="Pacific Standard Time" ${workingHours.timeZone === 'Pacific Standard Time' ? 'selected' : ''}>Pacific Standard Time</option>
-                                <option value="Eastern Standard Time" ${workingHours.timeZone === 'Eastern Standard Time' ? 'selected' : ''}>Eastern Standard Time</option>
-                                <option value="GMT Standard Time" ${workingHours.timeZone === 'GMT Standard Time' ? 'selected' : ''}>GMT Standard Time</option>
-                                <option value="Central Standard Time" ${workingHours.timeZone === 'Central Standard Time' ? 'selected' : ''}>Central Standard Time</option>
-                            </select>
-                        </div>
                         <div class="data-row">
                             <span class="field-label">Start Time:</span>
                             <input type="time" class="field-value editable-field" data-field="startTime" data-section="workingHours" value="${workingHours.startTime || '09:00:00'}">
@@ -756,7 +566,7 @@ function displayUnifiedUserData() {
     `;
 }
 
-// Toggle edit mode for unified user cards
+// Mock data management functions
 function toggleUnifiedEdit(button) {
     const card = button.closest('.unified-user-card');
     const editableFields = card.querySelectorAll('.editable-field, .editable-select');
@@ -797,7 +607,6 @@ function toggleUnifiedEdit(button) {
     }
 }
 
-// Save unified card data to mock data
 function saveUnifiedCardData(card) {
     const userId = card.getAttribute('data-user-id');
     const user = mockData.userProfiles.find(u => u.id === userId);
@@ -843,11 +652,9 @@ function saveUnifiedCardData(card) {
         }
     });
     
-    // Update the display to reflect changes
     updateSchedulingForms();
 }
 
-// Add busy slot for unified interface
 function addBusySlotUnified(userEmail) {
     let calendar = mockData.calendarAvailability.find(ca => ca.userEmail === userEmail);
     if (!calendar) {
@@ -856,7 +663,7 @@ function addBusySlotUnified(userEmail) {
     }
     
     const now = new Date();
-    const endTime = new Date(now.getTime() + 60 * 60 * 1000); // 1 hour later
+    const endTime = new Date(now.getTime() + 60 * 60 * 1000);
     
     const newSlot = {
         start: now.toISOString(),
@@ -869,7 +676,6 @@ function addBusySlotUnified(userEmail) {
     displayUnifiedUserData();
 }
 
-// Delete busy slot for unified interface
 function deleteBusySlotUnified(userEmail, slotIndex) {
     if (confirm('Are you sure you want to delete this calendar event?')) {
         const calendar = mockData.calendarAvailability.find(ca => ca.userEmail === userEmail);
@@ -880,166 +686,6 @@ function deleteBusySlotUnified(userEmail, slotIndex) {
     }
 }
 
-// Regenerate calendar data with specified duration
-function regenerateCalendarData() {
-    const duration = parseInt(document.getElementById('generation-duration').value);
-    const density = document.getElementById('generation-density').value;
-    
-    const now = new Date();
-    const endDate = new Date(now.getTime() + duration * 24 * 60 * 60 * 1000);
-    
-    mockData.userProfiles.forEach(user => {
-        const calendar = mockData.calendarAvailability.find(ca => ca.userEmail === user.email) || 
-                        { userEmail: user.email, busySlots: [] };
-        
-        if (!mockData.calendarAvailability.find(ca => ca.userEmail === user.email)) {
-            mockData.calendarAvailability.push(calendar);
-        }
-        
-        // Clear existing calendar events
-        calendar.busySlots = [];
-        
-        // Generate new events based on density
-        let meetingsPerDay;
-        switch (density) {
-            case 'low': meetingsPerDay = [0, 1]; break;
-            case 'high': meetingsPerDay = [3, 5]; break;
-            default: meetingsPerDay = [1, 3]; break;
-        }
-        
-        const currentDate = new Date(now);
-        while (currentDate <= endDate) {
-            if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) { // Skip weekends
-                const numMeetings = Math.floor(Math.random() * (meetingsPerDay[1] - meetingsPerDay[0] + 1)) + meetingsPerDay[0];
-                
-                for (let i = 0; i < numMeetings; i++) {
-                    const meetingStart = new Date(currentDate);
-                    meetingStart.setHours(Math.floor(Math.random() * 8) + 9); // 9 AM to 5 PM
-                    meetingStart.setMinutes(Math.floor(Math.random() * 2) * 30); // 0 or 30 minutes
-                    
-                    const meetingDuration = (Math.floor(Math.random() * 3) + 1) * 30; // 30, 60, or 90 minutes
-                    const meetingEnd = new Date(meetingStart.getTime() + meetingDuration * 60 * 1000);
-                    
-                    if (meetingEnd.getHours() <= 17) { // Don't exceed 5 PM
-                        const subjects = ['Team Meeting', 'Code Review', 'Product Planning', 'Client Call', 
-                                        'Sprint Planning', '1:1 Meeting', 'All Hands', 'Training Session'];
-                        
-                        calendar.busySlots.push({
-                            start: meetingStart.toISOString(),
-                            end: meetingEnd.toISOString(),
-                            status: Math.random() < 0.1 ? 'Tentative' : 'Busy',
-                            subject: subjects[Math.floor(Math.random() * subjects.length)]
-                        });
-                    }
-                }
-            }
-            currentDate.setDate(currentDate.getDate() + 1);
-        }
-        
-        // Sort events by start time
-        calendar.busySlots.sort((a, b) => new Date(a.start) - new Date(b.start));
-    });
-    
-    displayUnifiedUserData();
-    alert(`Calendar events regenerated for ${duration} days with ${density} density.`);
-}
-        </div>
-    `).join('');
-    
-    container.innerHTML = html;
-}
-
-// Display presence status
-function displayPresenceStatus() {
-    const container = document.getElementById('presence-status');
-    const html = mockData.presenceStatus.map((presence, index) => `
-        <div class="presence-card" data-presence-index="${index}">
-            <div class="card-header">
-                <div class="card-title">
-                    <i class="fas fa-signal"></i>
-                    ${presence.userEmail}
-                </div>
-                <div class="card-actions">
-                    <button class="btn-small btn-edit" onclick="toggleEdit(this)">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="card-content">
-                <div class="data-field">
-                    <span class="field-label">Availability:</span>
-                    <select class="field-value editable-select" data-field="availability">
-                        <option value="Available" ${presence.availability === 'Available' ? 'selected' : ''}>Available</option>
-                        <option value="Busy" ${presence.availability === 'Busy' ? 'selected' : ''}>Busy</option>
-                        <option value="DoNotDisturb" ${presence.availability === 'DoNotDisturb' ? 'selected' : ''}>Do Not Disturb</option>
-                        <option value="Away" ${presence.availability === 'Away' ? 'selected' : ''}>Away</option>
-                        <option value="BeRightBack" ${presence.availability === 'BeRightBack' ? 'selected' : ''}>Be Right Back</option>
-                    </select>
-                </div>
-                <div class="data-field">
-                    <span class="field-label">Activity:</span>
-                    <select class="field-value editable-select" data-field="activity">
-                        <option value="Available" ${presence.activity === 'Available' ? 'selected' : ''}>Available</option>
-                        <option value="InACall" ${presence.activity === 'InACall' ? 'selected' : ''}>In a Call</option>
-                        <option value="InAMeeting" ${presence.activity === 'InAMeeting' ? 'selected' : ''}>In a Meeting</option>
-                        <option value="Busy" ${presence.activity === 'Busy' ? 'selected' : ''}>Busy</option>
-                        <option value="Away" ${presence.activity === 'Away' ? 'selected' : ''}>Away</option>
-                    </select>
-                </div>
-                <div class="data-field">
-                    <span class="field-label">Last Modified:</span>
-                    <span class="field-value">${new Date(presence.lastModified).toLocaleString()}</span>
-                </div>
-            </div>
-        </div>
-    `).join('');
-    
-    container.innerHTML = html;
-}
-
-// Display calendar availability
-function displayCalendarAvailability() {
-    const container = document.getElementById('calendar-availability');
-    const html = mockData.calendarAvailability.map((calendar, index) => `
-        <div class="calendar-card" data-calendar-index="${index}">
-            <div class="card-header">
-                <div class="card-title">
-                    <i class="fas fa-calendar"></i>
-                    ${calendar.userEmail}
-                </div>
-                <div class="card-actions">
-                    <button class="btn-small btn-edit" onclick="addBusySlot(${index})">
-                        <i class="fas fa-plus"></i> Add Slot
-                    </button>
-                </div>
-            </div>
-            <div class="card-content">
-                ${calendar.busySlots.map((slot, slotIndex) => `
-                    <div class="busy-slot" data-slot-index="${slotIndex}">
-                        <div>
-                            <div class="slot-time">
-                                <input type="datetime-local" value="${slot.start.slice(0, -1)}" data-field="start" class="editable-field">
-                                to
-                                <input type="datetime-local" value="${slot.end.slice(0, -1)}" data-field="end" class="editable-field">
-                            </div>
-                            <div style="margin-top: 5px;">
-                                <input type="text" value="${slot.subject}" data-field="subject" class="editable-field" placeholder="Meeting subject">
-                            </div>
-                        </div>
-                        <div>
-                            <select class="slot-status status-${slot.status.toLowerCase()}" data-field="status">
-                                <option value="Busy" ${slot.status === 'Busy' ? 'selected' : ''}>Busy</option>
-                                <option value="Tentative" ${slot.status === 'Tentative' ? 'selected' : ''}>Tentative</option>
-                            </select>
-                            <button class="btn-small btn-delete" onclick="deleteBusySlot(${index}, ${slotIndex})">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `).join('')}
-                ${calendar.busySlots.length === 0 ? '<p style="color: #6c757d; font-style: italic;">No busy slots</p>' : ''}
-            </div>
-// Add new user
 function addNewUser() {
     const newUser = {
         id: Date.now().toString(),
@@ -1077,12 +723,10 @@ function addNewUser() {
     updateSchedulingForms();
 }
 
-// Delete user
 function deleteUser(userId) {
     if (confirm('Are you sure you want to delete this user? This will remove all their data.')) {
         const user = mockData.userProfiles.find(u => u.id === userId);
         if (user) {
-            // Remove from all mock data arrays
             mockData.userProfiles = mockData.userProfiles.filter(u => u.id !== userId);
             mockData.workingHours = mockData.workingHours.filter(wh => wh.userEmail !== user.email);
             mockData.presenceStatus = mockData.presenceStatus.filter(ps => ps.userEmail !== user.email);
@@ -1094,20 +738,92 @@ function deleteUser(userId) {
     }
 }
 
-// Reset mock data to defaults
+function regenerateCalendarData() {
+    const duration = parseInt(document.getElementById('generation-duration')?.value || 7);
+    const density = document.getElementById('generation-density')?.value || 'medium';
+    
+    const now = new Date();
+    const endDate = new Date(now.getTime() + duration * 24 * 60 * 60 * 1000);
+    
+    mockData.userProfiles.forEach(user => {
+        const calendar = mockData.calendarAvailability.find(ca => ca.userEmail === user.email) || 
+                        { userEmail: user.email, busySlots: [] };
+        
+        if (!mockData.calendarAvailability.find(ca => ca.userEmail === user.email)) {
+            mockData.calendarAvailability.push(calendar);
+        }
+        
+        calendar.busySlots = [];
+        
+        let meetingsPerDay;
+        switch (density) {
+            case 'low': meetingsPerDay = [0, 1]; break;
+            case 'high': meetingsPerDay = [3, 5]; break;
+            default: meetingsPerDay = [1, 3]; break;
+        }
+        
+        const currentDate = new Date(now);
+        while (currentDate <= endDate) {
+            if (currentDate.getDay() !== 0 && currentDate.getDay() !== 6) {
+                const numMeetings = Math.floor(Math.random() * (meetingsPerDay[1] - meetingsPerDay[0] + 1)) + meetingsPerDay[0];
+                
+                for (let i = 0; i < numMeetings; i++) {
+                    const meetingStart = new Date(currentDate);
+                    meetingStart.setHours(Math.floor(Math.random() * 8) + 9);
+                    meetingStart.setMinutes(Math.floor(Math.random() * 2) * 30);
+                    
+                    const meetingDuration = (Math.floor(Math.random() * 3) + 1) * 30;
+                    const meetingEnd = new Date(meetingStart.getTime() + meetingDuration * 60 * 1000);
+                    
+                    if (meetingEnd.getHours() <= 17) {
+                        const subjects = ['Team Meeting', 'Code Review', 'Product Planning', 'Client Call', 
+                                        'Sprint Planning', '1:1 Meeting', 'All Hands', 'Training Session'];
+                        
+                        calendar.busySlots.push({
+                            start: meetingStart.toISOString(),
+                            end: meetingEnd.toISOString(),
+                            status: Math.random() < 0.1 ? 'Tentative' : 'Busy',
+                            subject: subjects[Math.floor(Math.random() * subjects.length)]
+                        });
+                    }
+                }
+            }
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        calendar.busySlots.sort((a, b) => new Date(a.start) - new Date(b.start));
+    });
+    
+    displayUnifiedUserData();
+    alert(`Calendar events regenerated for ${duration} days with ${density} density.`);
+}
+
+function updateSchedulingForms() {
+    const emails = mockData.userProfiles.map(user => user.email).join('\n');
+    
+    const participantFields = [
+        document.getElementById('participants'),
+        document.getElementById('val-participants'),
+        document.getElementById('conflict-participants')
+    ];
+    
+    participantFields.forEach(field => {
+        if (field) {
+            field.value = emails;
+        }
+    });
+}
+
 function resetMockData() {
     if (confirm('Are you sure you want to reset all mock data to defaults?')) {
-        // Reset to original mock data
         initializeMockData();
         updateSchedulingForms();
         alert('Mock data has been reset to defaults.');
     }
 }
 
-// Generate random mock data
 function generateRandomData() {
     if (confirm('Are you sure you want to generate random mock data? This will replace current data.')) {
-        // Generate random users
         const randomNames = ['Alice Johnson', 'Bob Smith', 'Carol Davis', 'David Wilson', 'Eva Brown'];
         const randomTitles = ['Software Engineer', 'Product Manager', 'UX Designer', 'Engineering Manager', 'HR Business Partner'];
         const randomDepartments = ['Engineering', 'Product', 'Design', 'Management', 'Human Resources'];
@@ -1124,7 +840,6 @@ function generateRandomData() {
             timeZone: timezones[Math.floor(Math.random() * timezones.length)]
         }));
         
-        // Generate working hours
         mockData.workingHours = mockData.userProfiles.map(user => ({
             userEmail: user.email,
             timeZone: user.timeZone,
@@ -1133,7 +848,6 @@ function generateRandomData() {
             endTime: ['16:30:00', '17:00:00', '17:30:00'][Math.floor(Math.random() * 3)]
         }));
         
-        // Generate presence status
         mockData.presenceStatus = mockData.userProfiles.map(user => ({
             userEmail: user.email,
             availability: availabilityStates[Math.floor(Math.random() * availabilityStates.length)],
@@ -1141,13 +855,11 @@ function generateRandomData() {
             lastModified: new Date().toISOString()
         }));
         
-        // Generate calendar availability
         mockData.calendarAvailability = mockData.userProfiles.map(user => ({
             userEmail: user.email,
             busySlots: []
         }));
         
-        // Generate calendar events based on current settings
         regenerateCalendarData();
         
         displayUnifiedUserData();
@@ -1156,7 +868,6 @@ function generateRandomData() {
     }
 }
 
-// Export mock data
 function exportMockData() {
     const dataStr = JSON.stringify(mockData, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
@@ -1171,30 +882,25 @@ function exportMockData() {
     URL.revokeObjectURL(url);
 }
 
-// Update scheduling forms with current mock data
-function updateSchedulingForms() {
-    const emails = mockData.userProfiles.map(user => user.email).join('\n');
-    
-    // Update participant fields
-    const participantFields = [
-        document.getElementById('participants'),
-        document.getElementById('val-participants'),
-        document.getElementById('conflict-participants')
-    ];
-    
-    participantFields.forEach(field => {
-        if (field) {
-            field.value = emails;
-        }
-    });
+// Placeholder functions for other features
+function displayValidationResults(result) {
+    console.log('Validation results:', result);
 }
 
-// Listen for changes in mock data fields
-document.addEventListener('change', function(e) {
-    if (e.target.classList.contains('editable-field') || e.target.classList.contains('editable-select')) {
-        const card = e.target.closest('.user-profile-card, .working-hours-card, .presence-card, .calendar-card');
-        if (card) {
-            saveCardData(card);
-        }
+function displayConflictResults(result) {
+    console.log('Conflict results:', result);
+}
+
+function displayError(containerId, message) {
+    const container = document.getElementById(containerId);
+    if (container) {
+        container.innerHTML = `
+            <div class="status-badge status-error">
+                <i class="fas fa-exclamation-triangle"></i>
+                ${message}
+            </div>
+        `;
+        container.style.display = 'block';
+        container.scrollIntoView({ behavior: 'smooth' });
     }
-});
+}
