@@ -245,24 +245,95 @@ textarea {
     box-shadow: var(--shadow);
 }
 
-.time-slot .slot-time {
+.time-slot-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    padding: 20px;
+    margin-bottom: 20px;
+    transition: var(--transition);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.time-slot-card:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(0, 102, 204, 0.15);
+}
+
+.time-slot-card.enhanced {
+    border-left: 5px solid var(--primary-color);
+}
+
+.slot-date-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.slot-date {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.slot-time-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.time-slot .slot-time,
+.time-slot-card .slot-time {
     font-size: 1.2rem;
     font-weight: 600;
     color: var(--primary-color);
     margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.time-slot .slot-score {
+.time-range {
+    background: rgba(0, 102, 204, 0.1);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
+.time-slot .slot-score,
+.time-slot-card .slot-score {
     display: flex;
     justify-content: space-between;
     margin-bottom: 10px;
 }
 
+.slot-availability {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: rgba(40, 167, 69, 0.1);
+    border-radius: 6px;
+    color: var(--text-primary);
+}
+
 .score-badge {
     background: var(--accent-color);
     color: white;
-    padding: 4px 12px;
+    padding: 6px 14px;
     border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 60px;
+}
     font-size: 0.9rem;
     font-weight: 600;
 }
@@ -278,6 +349,26 @@ textarea {
 
 .slot-reasons {
     margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.reason-tag {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    color: var(--primary-color);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid rgba(0, 102, 204, 0.2);
+}
+
+.reason-tag i {
+    font-size: 0.8rem;
 }
 
 .slot-reasons ul {
@@ -476,6 +567,42 @@ footer {
     .tab-button {
         min-width: auto;
         width: 100%;
+    }
+    
+    .form-row {
+        flex-direction: column;
+    }
+    
+    /* Time slot card responsive improvements */
+    .time-slot-card {
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+    
+    .slot-time-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .slot-date-header {
+        font-size: 0.95rem;
+    }
+    
+    .time-range {
+        font-size: 1rem;
+        padding: 4px 8px;
+    }
+    
+    .slot-reasons {
+        flex-direction: column;
+        gap: 5px;
+    }
+    
+    .reason-tag {
+        font-size: 0.8rem;
+        padding: 4px 8px;
+    }
     }
     
     .form-row {

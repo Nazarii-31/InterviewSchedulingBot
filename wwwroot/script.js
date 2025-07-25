@@ -233,23 +233,48 @@ function createTimeSlotHtml(slot) {
     const score = slot.businessScore || timeSlot.confidence || 0;
     const reasons = slot.businessReasons || [timeSlot.reason] || [];
     
+    const startDate = new Date(timeSlot.startTime);
+    const endDate = new Date(timeSlot.endTime);
+    
+    // Format date and time separately for better display
+    const dateOptions = { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    };
+    const timeOptions = { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true
+    };
+    
+    const formattedDate = startDate.toLocaleDateString('en-US', dateOptions);
+    const startTime = startDate.toLocaleTimeString('en-US', timeOptions);
+    const endTime = endDate.toLocaleTimeString('en-US', timeOptions);
+    
     return `
-        <div class="time-slot-card">
-            <div class="slot-header">
+        <div class="time-slot-card enhanced">
+            <div class="slot-date-header">
+                <i class="fas fa-calendar-day"></i>
+                <span class="slot-date">${formattedDate}</span>
+            </div>
+            <div class="slot-time-info">
                 <div class="slot-time">
                     <i class="fas fa-clock"></i>
-                    ${new Date(timeSlot.startTime).toLocaleString()} - ${new Date(timeSlot.endTime).toLocaleString()}
+                    <span class="time-range">${startTime} - ${endTime}</span>
                 </div>
                 <div class="slot-score">
                     <span class="score-badge score-${getScoreClass(score)}">${Math.round(score)}%</span>
                 </div>
             </div>
             <div class="slot-details">
-                <div class="slot-reasons">
-                    ${reasons.map(reason => `<span class="reason-tag">${reason}</span>`).join('')}
+                <div class="slot-availability">
+                    <i class="fas fa-users"></i>
+                    <strong>Available:</strong> ${timeSlot.availableAttendees?.length || 0}/${(timeSlot.availableAttendees?.length || 0) + (timeSlot.conflictingAttendees?.length || 0)} participants
                 </div>
-                <div class="slot-participants">
-                    <strong>Available:</strong> ${timeSlot.availableAttendees?.length || 0}/${timeSlot.availableAttendees?.length + timeSlot.conflictingAttendees?.length || 0} participants
+                <div class="slot-reasons">
+                    ${reasons.map(reason => `<span class="reason-tag"><i class="fas fa-check-circle"></i>${reason}</span>`).join('')}
                 </div>
             </div>
         </div>

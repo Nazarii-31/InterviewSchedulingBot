@@ -352,8 +352,8 @@ namespace InterviewSchedulingBot.Services.Business
                 currentDate = currentDate.AddDays(1);
             }
 
-            // Sort by business score and return top recommendations
-            return recommendations.OrderByDescending(r => r.BusinessScore).Take(10).ToList();
+            // Sort by start time chronologically, then by business score for same time
+            return recommendations.OrderBy(r => r.TimeSlot.StartTime).ThenByDescending(r => r.BusinessScore).Take(10).ToList();
         }
 
         private async Task<List<BusinessRankedTimeSlot>> GenerateAlternativesAsync(SchedulingBusinessRequest request)
@@ -387,6 +387,7 @@ namespace InterviewSchedulingBot.Services.Business
                 // Focus on afternoon slots for alternatives
                 var afternoonSlots = FindAvailableSlotsForDay(currentDate, request, calendarAvailability, workingHoursMap)
                     .Where(slot => slot.TimeSlot.StartTime.Hour >= 14) // 2 PM or later
+                    .OrderBy(slot => slot.TimeSlot.StartTime) // Sort by time
                     .Take(2);
 
                 foreach (var slot in afternoonSlots)
@@ -399,7 +400,8 @@ namespace InterviewSchedulingBot.Services.Business
                 currentDate = currentDate.AddDays(1);
             }
 
-            return alternatives.OrderByDescending(a => a.BusinessScore).ToList();
+            // Sort alternatives by start time chronologically
+            return alternatives.OrderBy(a => a.TimeSlot.StartTime).ToList();
         }
 
         private async Task<BusinessInsights> GenerateBusinessInsightsAsync(
@@ -621,7 +623,7 @@ namespace InterviewSchedulingBot.Services.Business
                 currentTime = currentTime.AddMinutes(30);
             }
 
-            return slots.OrderByDescending(s => s.BusinessScore).ToList();
+            return slots.OrderBy(s => s.TimeSlot.StartTime).ThenByDescending(s => s.BusinessScore).ToList();
         }
 
         private double CalculateTimeSlotBusinessScore(DateTime startTime, int durationMinutes)
