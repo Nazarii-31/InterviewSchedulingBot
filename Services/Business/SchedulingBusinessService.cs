@@ -346,15 +346,16 @@ namespace InterviewSchedulingBot.Services.Business
                 if (daySlots.Any())
                 {
                     dailySlots[currentDate] = daySlots;
-                    // Take more slots per day to increase variety - include up to 4 slots per day
-                    recommendations.AddRange(daySlots.Take(4)); 
+                    // Include ALL available slots for each day - no limit
+                    recommendations.AddRange(daySlots); 
                 }
 
                 currentDate = currentDate.AddDays(1);
             }
 
             // Sort by start time chronologically, then by business score for same time
-            return recommendations.OrderBy(r => r.TimeSlot.StartTime).ThenByDescending(r => r.BusinessScore).Take(15).ToList();
+            // Return ALL slots, not just limited to 15
+            return recommendations.OrderBy(r => r.TimeSlot.StartTime).ThenByDescending(r => r.BusinessScore).ToList();
         }
 
         private async Task<List<BusinessRankedTimeSlot>> GenerateAlternativesAsync(SchedulingBusinessRequest request)
@@ -377,7 +378,7 @@ namespace InterviewSchedulingBot.Services.Business
             var currentDate = request.EarliestDate.Date;
 
             // Look for alternative times (later in the day, different days)
-            while (currentDate <= request.LatestDate.Date && alternatives.Count < 5)
+            while (currentDate <= request.LatestDate.Date)
             {
                 if (currentDate.DayOfWeek == DayOfWeek.Saturday || currentDate.DayOfWeek == DayOfWeek.Sunday)
                 {
@@ -385,15 +386,13 @@ namespace InterviewSchedulingBot.Services.Business
                     continue;
                 }
 
-                // Focus on afternoon slots for alternatives
-                var afternoonSlots = FindAvailableSlotsForDay(currentDate, request, calendarAvailability, workingHoursMap)
-                    .Where(slot => slot.TimeSlot.StartTime.Hour >= 14) // 2 PM or later
-                    .OrderBy(slot => slot.TimeSlot.StartTime) // Sort by time
-                    .Take(2);
+                // Include ALL alternative slots for comprehensive view
+                var allDaySlots = FindAvailableSlotsForDay(currentDate, request, calendarAvailability, workingHoursMap)
+                    .OrderBy(slot => slot.TimeSlot.StartTime); // Sort by time
 
-                foreach (var slot in afternoonSlots)
+                foreach (var slot in allDaySlots)
                 {
-                    slot.BusinessReasons.Add("Alternative afternoon option");
+                    slot.BusinessReasons.Add("Alternative option");
                     slot.BusinessScore *= 0.9; // Slightly lower score for alternatives
                     alternatives.Add(slot);
                 }

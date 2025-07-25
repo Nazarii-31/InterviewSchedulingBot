@@ -55,17 +55,8 @@ builder.Services.AddSingleton<UserState>();
 // Create the conversation state (used for dialog state).
 builder.Services.AddSingleton<ConversationState>();
 
-// Register configuration validation service
-builder.Services.AddSingleton<ConfigurationValidationService>();
-
 // Register authentication service
 builder.Services.AddSingleton<IAuthenticationService, AuthenticationService>();
-
-// Register the Graph Calendar Service
-builder.Services.AddSingleton<IGraphCalendarService, GraphCalendarService>();
-
-// Register the Core Scheduling Logic
-builder.Services.AddSingleton<ICoreSchedulingLogic, CoreSchedulingLogic>();
 
 // === INTEGRATION LAYER SERVICES ===
 // Register Teams integration service (includes calendar access through Teams API)
@@ -86,44 +77,10 @@ else
 // Register pure business logic service
 builder.Services.AddSingleton<ISchedulingBusinessService, SchedulingBusinessService>();
 
-// Register the AI Scheduling Services (Hybrid Approach) - Unified Service
-builder.Services.AddSingleton<ISchedulingHistoryRepository, InMemorySchedulingHistoryRepository>();
-builder.Services.AddSingleton<ISchedulingMLModel, SchedulingMLModel>();
-var hybridSchedulingService = new ServiceDescriptor(typeof(HybridAISchedulingService), typeof(HybridAISchedulingService), ServiceLifetime.Singleton);
-builder.Services.Add(hybridSchedulingService);
-
-// Register the same instance for both interfaces (AI and Basic scheduling)
-builder.Services.AddSingleton<IAISchedulingService>(provider => provider.GetRequiredService<HybridAISchedulingService>());
-builder.Services.AddSingleton<ISchedulingService>(provider => provider.GetRequiredService<HybridAISchedulingService>());
-
-// Register the Graph Scheduling Service (AI-driven scheduling)
-// Use mock service if configured, otherwise use real service
-var useMockGraphService = builder.Configuration.GetValue<bool>("GraphScheduling:UseMockService", false);
-if (useMockGraphService)
-{
-    builder.Services.AddSingleton<IGraphSchedulingService, MockGraphSchedulingService>();
-    Console.WriteLine("✓ Using MockGraphSchedulingService for development (no Azure credentials required)");
-}
-else
-{
-    builder.Services.AddSingleton<IGraphSchedulingService, GraphSchedulingService>();
-    Console.WriteLine("✓ Using GraphSchedulingService (requires Azure credentials)");
-}
-
 // Create the bot as a transient. In this case the ASP Controller is expecting an IBot.
 builder.Services.AddTransient<IBot, InterviewBot>();
 
 var app = builder.Build();
-
-// Validate configuration at startup
-var configValidator = app.Services.GetRequiredService<ConfigurationValidationService>();
-configValidator.LogConfigurationState();
-
-if (!configValidator.ValidateAuthenticationConfiguration())
-{
-    var logger = app.Services.GetRequiredService<ILogger<Program>>();
-    logger.LogWarning("Authentication configuration is incomplete. The bot will start but authentication features may not work properly.");
-}
 
 
 
