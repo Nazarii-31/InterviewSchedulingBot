@@ -1,7 +1,6 @@
 using Microsoft.Bot.Builder;
 using Microsoft.Bot.Builder.Integration.AspNet.Core;
 using Microsoft.Bot.Connector.Authentication;
-using InterviewSchedulingBot.Bots;
 using InterviewSchedulingBot.Services;
 using InterviewSchedulingBot.Interfaces;
 using InterviewSchedulingBot.Interfaces.Integration;

@@ -5,6 +5,8 @@ using Microsoft.Bot.Schema;
 using MediatR;
 using InterviewBot.Bot.State;
 using InterviewBot.Bot.Dialogs;
+using InterviewBot.Bot.Cards;
+using InterviewBot.Application.Interviews.Commands;
 using InterviewSchedulingBot.Interfaces.Business;
 using InterviewSchedulingBot.Interfaces.Integration;
 using InterviewSchedulingBot.Interfaces;
@@ -96,6 +98,13 @@ namespace InterviewBot.Bot
         {
             _logger.LogInformation("Received message: {Message}", turnContext.Activity.Text);
             
+            // Check if this is an adaptive card action
+            if (turnContext.Activity.Value != null)
+            {
+                await HandleAdaptiveCardActionAsync(turnContext, cancellationToken);
+                return;
+            }
+            
             // Update user activity
             var userProfile = await _accessors.UserProfileAccessor.GetAsync(
                 turnContext, () => new UserProfile(), cancellationToken);
@@ -114,6 +123,216 @@ namespace InterviewBot.Bot
             // Save state
             await _conversationState.SaveChangesAsync(turnContext, false, cancellationToken);
             await _userState.SaveChangesAsync(turnContext, false, cancellationToken);
+        }
+        
+        private async Task HandleAdaptiveCardActionAsync(
+            ITurnContext<IMessageActivity> turnContext, 
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var cardData = turnContext.Activity.Value as Newtonsoft.Json.Linq.JObject;
+                var action = cardData?["action"]?.ToString();
+                
+                _logger.LogInformation("Handling adaptive card action: {Action}", action);
+                
+                // Get current dialog context
+                var dialogContext = await _dialogs.CreateContextAsync(turnContext, cancellationToken);
+                var interviewState = await _accessors.InterviewStateAccessor.GetAsync(
+                    turnContext, () => new InterviewState(), cancellationToken);
+                
+                switch (action)
+                {
+                    case "selectSlot":
+                        await HandleSlotSelectionAsync(turnContext, cardData, interviewState, dialogContext, cancellationToken);
+                        break;
+                        
+                    case "confirm":
+                        await HandleConfirmationAsync(turnContext, interviewState, dialogContext, cancellationToken);
+                        break;
+                        
+                    case "cancel":
+                        await HandleCancellationAsync(turnContext, dialogContext, cancellationToken);
+                        break;
+                        
+                    case "back":
+                        await HandleBackActionAsync(turnContext, dialogContext, cancellationToken);
+                        break;
+                        
+                    case "scheduleAnother":
+                        await HandleScheduleAnotherAsync(turnContext, dialogContext, cancellationToken);
+                        break;
+                        
+                    case "viewInterviews":
+                        await HandleViewInterviewsAsync(turnContext, dialogContext, cancellationToken);
+                        break;
+                        
+                    default:
+                        await turnContext.SendActivityAsync(
+                            MessageFactory.Text("Unknown action. Please try again."), 
+                            cancellationToken);
+                        break;
+                }
+                
+                // Save state after handling action
+                await _conversationState.SaveChangesAsync(turnContext, false, cancellationToken);
+                await _userState.SaveChangesAsync(turnContext, false, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error handling adaptive card action");
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("Sorry, there was an error processing your selection. Please try again."), 
+                    cancellationToken);
+            }
+        }
+        
+        private async Task HandleSlotSelectionAsync(
+            ITurnContext turnContext,
+            Newtonsoft.Json.Linq.JObject cardData,
+            InterviewState interviewState,
+            DialogContext dialogContext,
+            CancellationToken cancellationToken)
+        {
+            var slotIndex = cardData["slotIndex"]?.ToObject<int>() ?? -1;
+            
+            if (slotIndex >= 0 && slotIndex < interviewState.SuggestedSlots.Count)
+            {
+                var selectedSlot = interviewState.SuggestedSlots[slotIndex];
+                interviewState.SelectedSlot = selectedSlot.StartTime;
+                interviewState.CurrentStep = "Confirming";
+                
+                // Show confirmation card
+                var confirmationCard = AdaptiveCardHelper.CreateInterviewConfirmationCard(
+                    interviewState.Title,
+                    selectedSlot.StartTime,
+                    interviewState.DurationMinutes,
+                    interviewState.Participants,
+                    selectedSlot.AvailableParticipants,
+                    selectedSlot.TotalParticipants);
+                
+                var activity = MessageFactory.Attachment(confirmationCard);
+                activity.Text = "Please confirm your interview details:";
+                
+                await turnContext.SendActivityAsync(activity, cancellationToken);
+            }
+            else
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("Invalid slot selection. Please try again."), 
+                    cancellationToken);
+            }
+        }
+        
+        private async Task HandleConfirmationAsync(
+            ITurnContext turnContext,
+            InterviewState interviewState,
+            DialogContext dialogContext,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Create the interview using MediatR
+                var command = new ScheduleInterviewCommand
+                {
+                    Title = interviewState.Title,
+                    StartTime = interviewState.SelectedSlot!.Value,
+                    Duration = TimeSpan.FromMinutes(interviewState.DurationMinutes),
+                    ParticipantEmails = interviewState.Participants
+                };
+                
+                var result = await _mediator.Send(command, cancellationToken);
+                
+                if (result.Success)
+                {
+                    // Show success card
+                    var successCard = AdaptiveCardHelper.CreateSchedulingSuccessCard(
+                        interviewState.Title,
+                        interviewState.SelectedSlot.Value,
+                        interviewState.DurationMinutes,
+                        interviewState.Participants);
+                    
+                    var activity = MessageFactory.Attachment(successCard);
+                    await turnContext.SendActivityAsync(activity, cancellationToken);
+                    
+                    // Clear the interview state
+                    await _accessors.InterviewStateAccessor.DeleteAsync(turnContext, cancellationToken);
+                    
+                    _logger.LogInformation("Interview scheduled successfully: {InterviewId}", result.InterviewId);
+                }
+                else
+                {
+                    await turnContext.SendActivityAsync(
+                        MessageFactory.Text($"❌ Failed to schedule interview: {result.ErrorMessage}"), 
+                        cancellationToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error confirming interview");
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("❌ An error occurred while scheduling the interview. Please try again."), 
+                    cancellationToken);
+            }
+        }
+        
+        private async Task HandleCancellationAsync(
+            ITurnContext turnContext,
+            DialogContext dialogContext,
+            CancellationToken cancellationToken)
+        {
+            await turnContext.SendActivityAsync(
+                MessageFactory.Text("❌ Interview scheduling cancelled."), 
+                cancellationToken);
+            
+            // Clear state and end dialog
+            await _accessors.InterviewStateAccessor.DeleteAsync(turnContext, cancellationToken);
+            await dialogContext.CancelAllDialogsAsync(cancellationToken);
+        }
+        
+        private async Task HandleBackActionAsync(
+            ITurnContext turnContext,
+            DialogContext dialogContext,
+            CancellationToken cancellationToken)
+        {
+            var interviewState = await _accessors.InterviewStateAccessor.GetAsync(
+                turnContext, () => new InterviewState(), cancellationToken);
+            
+            // Go back to slot selection by showing slots again
+            if (interviewState.SuggestedSlots?.Any() == true)
+            {
+                var cardAttachment = AdaptiveCardHelper.CreateTimeSlotSelectionCard(
+                    interviewState.SuggestedSlots, interviewState.Title);
+                var activity = MessageFactory.Attachment(cardAttachment);
+                activity.Text = "Please select a different time slot:";
+                
+                await turnContext.SendActivityAsync(activity, cancellationToken);
+            }
+            else
+            {
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("No slots available to go back to. Please start a new scheduling session."), 
+                    cancellationToken);
+            }
+        }
+        
+        private async Task HandleScheduleAnotherAsync(
+            ITurnContext turnContext,
+            DialogContext dialogContext,
+            CancellationToken cancellationToken)
+        {
+            // Clear state and start new scheduling dialog
+            await _accessors.InterviewStateAccessor.DeleteAsync(turnContext, cancellationToken);
+            await dialogContext.BeginDialogAsync(nameof(ScheduleInterviewDialog), null, cancellationToken);
+        }
+        
+        private async Task HandleViewInterviewsAsync(
+            ITurnContext turnContext,
+            DialogContext dialogContext,
+            CancellationToken cancellationToken)
+        {
+            // Start view interviews dialog
+            await dialogContext.BeginDialogAsync(nameof(ViewInterviewsDialog), null, cancellationToken);
         }
         
         private async Task RouteMessageAsync(

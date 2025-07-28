@@ -4,10 +4,12 @@ using Microsoft.Bot.Builder.Dialogs.Choices;
 using Microsoft.Bot.Schema;
 using MediatR;
 using InterviewBot.Bot.State;
+using InterviewBot.Bot.Cards;
 using InterviewBot.Application.Availability.Queries;
 using InterviewBot.Application.Interviews.Commands;
 using InterviewBot.Application.DTOs;
 using InterviewBot.Domain.Entities;
+using Newtonsoft.Json.Linq;
 
 namespace InterviewBot.Bot.Dialogs
 {
@@ -205,29 +207,23 @@ namespace InterviewBot.Bot.Dialogs
             var slots = interviewState.SuggestedSlots;
             interviewState.CurrentStep = "SelectingSlot";
             
-            var choices = new List<Choice>();
-            var messageText = "✅ Found available time slots! Please select your preferred option:\n\n";
-            
-            for (int i = 0; i < slots.Count; i++)
+            if (!slots.Any())
             {
-                var slot = slots[i];
-                var timeStr = slot.StartTime.ToString("ddd, MMM dd 'at' h:mm tt");
-                var availabilityStr = $"{slot.AvailableParticipants}/{slot.TotalParticipants} participants available";
-                var scoreStr = $"Score: {slot.Score:F1}";
-                
-                messageText += $"**{i + 1}.** {timeStr}\n   📊 {availabilityStr} | {scoreStr}\n\n";
-                
-                choices.Add(new Choice($"{i + 1}. {timeStr}") { Value = i.ToString() });
+                await stepContext.Context.SendActivityAsync(
+                    MessageFactory.Text("❌ No available slots found."), 
+                    cancellationToken);
+                return await stepContext.EndDialogAsync(null, cancellationToken);
             }
             
-            var promptOptions = new PromptOptions 
-            { 
-                Prompt = MessageFactory.Text(messageText),
-                Choices = choices,
-                RetryPrompt = MessageFactory.Text("Please select a valid time slot option.")
-            };
+            // Create and send adaptive card for slot selection
+            var cardAttachment = AdaptiveCardHelper.CreateTimeSlotSelectionCard(slots, interviewState.Title);
+            var activity = MessageFactory.Attachment(cardAttachment);
+            activity.Text = "Found available time slots! Please select your preferred time:";
             
-            return await stepContext.PromptAsync(nameof(ChoicePrompt), promptOptions, cancellationToken);
+            await stepContext.Context.SendActivityAsync(activity, cancellationToken);
+            
+            // Wait for user input (will be handled by the bot's OnMessageActivityAsync)
+            return new DialogTurnResult(DialogTurnStatus.Waiting);
         }
         
         private async Task<DialogTurnResult> ProcessSlotSelectionStepAsync(WaterfallStepContext stepContext, CancellationToken cancellationToken)
