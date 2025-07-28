@@ -19,6 +19,8 @@ using InterviewBot.Persistence.Repositories;
 using InterviewBot.Infrastructure.Calendar;
 using InterviewBot.Infrastructure.Scheduling;
 using InterviewBot.Infrastructure.Telemetry;
+using InterviewBot.Bot.State;
+using InterviewBot.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -55,6 +57,11 @@ builder.Services.AddScoped<ITelemetryService, TelemetryService>();
 // Register Infrastructure Services
 builder.Services.AddScoped<IGraphClientFactory, GraphClientFactory>();
 builder.Services.AddScoped<OptimalSlotFinder>();
+
+// Register Bot State Accessors
+builder.Services.AddSingleton<BotStateAccessors>();
+
+// === EXISTING SERVICES ===
 
 // Add services to the container.
 builder.Services.AddControllers().AddNewtonsoftJson();
@@ -122,7 +129,8 @@ else
 builder.Services.AddSingleton<ISchedulingBusinessService, SchedulingBusinessService>();
 
 // Create the bot as a transient. In this case the ASP Controller is expecting an IBot.
-builder.Services.AddTransient<IBot, InterviewSchedulingBot.Bots.InterviewBot>();
+// Use the enhanced bot with Clean Architecture integration
+builder.Services.AddTransient<IBot, InterviewSchedulingBotEnhanced>();
 
 var app = builder.Build();
 
