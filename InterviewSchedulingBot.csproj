@@ -17,6 +17,13 @@
     <PackageReference Include="Microsoft.Identity.Client" Version="4.61.3" />
     <PackageReference Include="Azure.AI.OpenAI" Version="1.0.0-beta.17" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    
+    <!-- Clean Architecture packages -->
+    <PackageReference Include="MediatR" Version="12.4.1" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="8.0.11" />
   </ItemGroup>
 
 </Project>
