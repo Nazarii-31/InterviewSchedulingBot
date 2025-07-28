@@ -9,6 +9,7 @@ using InterviewSchedulingBot.Services.Integration;
 using InterviewSchedulingBot.Services.Business;
 using Microsoft.OpenApi.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 // Clean Architecture imports
 using MediatR;
@@ -17,6 +18,7 @@ using InterviewBot.Persistence;
 using InterviewBot.Persistence.Repositories;
 using InterviewBot.Infrastructure.Calendar;
 using InterviewBot.Infrastructure.Scheduling;
+using InterviewBot.Infrastructure.Caching;
 using InterviewBot.Infrastructure.Telemetry;
 using InterviewBot.Bot.State;
 using InterviewBot.Bot;
@@ -25,6 +27,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers().AddNewtonsoftJson();
+
+// Add Memory Cache for caching
+builder.Services.AddMemoryCache();
 
 // === CLEAN ARCHITECTURE SETUP ===
 
@@ -47,9 +52,16 @@ builder.Services.AddScoped<IInterviewRepository, InterviewRepository>();
 builder.Services.AddScoped<IParticipantRepository, ParticipantRepository>();
 builder.Services.AddScoped<IAvailabilityRepository, AvailabilityRepository>();
 
-// Register Domain Services
+// Register Domain Services with caching
 builder.Services.AddScoped<ICalendarService, GraphCalendarService>();
-builder.Services.AddScoped<IAvailabilityService, AvailabilityService>();
+builder.Services.AddScoped<AvailabilityService>(); // Base service
+builder.Services.AddScoped<IAvailabilityService>(provider =>
+{
+    var baseService = provider.GetRequiredService<AvailabilityService>();
+    var cache = provider.GetRequiredService<IMemoryCache>();
+    var logger = provider.GetRequiredService<ILogger<CachedAvailabilityService>>();
+    return new CachedAvailabilityService(baseService, cache, logger);
+});
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
 builder.Services.AddScoped<ITelemetryService, TelemetryService>();
 

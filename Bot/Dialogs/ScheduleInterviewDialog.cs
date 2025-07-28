@@ -289,19 +289,24 @@ namespace InterviewBot.Bot.Dialogs
                     Title = interviewState.Title,
                     StartTime = interviewState.SelectedSlot!.Value,
                     Duration = TimeSpan.FromMinutes(interviewState.DurationMinutes),
-                    Participants = interviewState.Participants.Select(email => new ParticipantDto
-                    {
-                        Email = email,
-                        Name = email, // In real implementation, we'd resolve names
-                        Role = "Interviewer" // Default role
-                    }).ToList()
+                    ParticipantEmails = interviewState.Participants
                 };
                 
-                var interviewId = await _mediator.Send(command, cancellationToken);
+                var result = await _mediator.Send(command, cancellationToken);
                 
-                _logger.LogInformation("Successfully scheduled interview {InterviewId}", interviewId);
-                
-                return await stepContext.NextAsync(interviewId, cancellationToken);
+                if (result.Success)
+                {
+                    _logger.LogInformation("Successfully scheduled interview {InterviewId}", result.InterviewId);
+                    return await stepContext.NextAsync(result.InterviewId, cancellationToken);
+                }
+                else
+                {
+                    _logger.LogError("Failed to schedule interview: {ErrorMessage}", result.ErrorMessage);
+                    await stepContext.Context.SendActivityAsync(
+                        MessageFactory.Text($"❌ Failed to schedule the interview: {result.ErrorMessage}"), 
+                        cancellationToken);
+                    return await stepContext.EndDialogAsync(null, cancellationToken);
+                }
             }
             catch (Exception ex)
             {
