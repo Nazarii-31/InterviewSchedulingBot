@@ -10,6 +10,7 @@ using InterviewBot.Application.Interviews.Commands;
 using InterviewSchedulingBot.Interfaces.Business;
 using InterviewSchedulingBot.Interfaces.Integration;
 using InterviewSchedulingBot.Interfaces;
+using InterviewSchedulingBot.Services.Business;
 
 namespace InterviewBot.Bot
 {
@@ -25,6 +26,9 @@ namespace InterviewBot.Bot
         private readonly BotStateAccessors _accessors;
         private readonly DialogSet _dialogs;
         private readonly ILogger<InterviewSchedulingBotEnhanced> _logger;
+        private readonly SlotQueryParser _slotQueryParser;
+        private readonly ConversationalResponseGenerator _responseGenerator;
+        private readonly InterviewBot.Domain.Interfaces.ISchedulingService _schedulingService;
 
         public InterviewSchedulingBotEnhanced(
             IAuthenticationService authService, 
@@ -36,7 +40,10 @@ namespace InterviewBot.Bot
             UserState userState,
             BotStateAccessors accessors,
             ILogger<InterviewSchedulingBotEnhanced> logger,
-            ILoggerFactory loggerFactory)
+            ILoggerFactory loggerFactory,
+            SlotQueryParser slotQueryParser,
+            ConversationalResponseGenerator responseGenerator,
+            InterviewBot.Domain.Interfaces.ISchedulingService schedulingService)
         {
             _authService = authService;
             _schedulingBusinessService = schedulingBusinessService;
@@ -47,11 +54,15 @@ namespace InterviewBot.Bot
             _userState = userState;
             _accessors = accessors;
             _logger = logger;
+            _slotQueryParser = slotQueryParser;
+            _responseGenerator = responseGenerator;
+            _schedulingService = schedulingService;
             
             // Setup dialogs with specific loggers
             _dialogs = new DialogSet(_accessors.DialogStateAccessor);
             _dialogs.Add(new ScheduleInterviewDialog(_accessors, _mediator, loggerFactory.CreateLogger<ScheduleInterviewDialog>()));
             _dialogs.Add(new ViewInterviewsDialog(_accessors, _mediator, loggerFactory.CreateLogger<ViewInterviewsDialog>()));
+            _dialogs.Add(new FindSlotsDialog(_slotQueryParser, _schedulingService, _responseGenerator, _accessors, loggerFactory.CreateLogger<FindSlotsDialog>()));
         }
 
         protected override async Task OnMembersAddedAsync(
@@ -354,6 +365,11 @@ namespace InterviewBot.Bot
             {
                 await dialogContext.BeginDialogAsync(nameof(ViewInterviewsDialog), null, cancellationToken);
             }
+            else if (IsSlotFindingIntent(messageText))
+            {
+                // Handle natural language slot finding queries
+                await dialogContext.BeginDialogAsync(nameof(FindSlotsDialog), turnContext.Activity.Text, cancellationToken);
+            }
             else if (IsHelpIntent(messageText))
             {
                 await ShowHelpMessageAsync(turnContext, cancellationToken);
@@ -364,8 +380,17 @@ namespace InterviewBot.Bot
             }
             else
             {
-                // Unknown intent - provide helpful guidance
-                await ShowUnknownIntentMessageAsync(turnContext, cancellationToken);
+                // Check if this might be a natural language query by looking for time/day references
+                if (ContainsTimeOrDayReference(messageText))
+                {
+                    _logger.LogInformation("Detected potential slot query: {Message}", messageText);
+                    await dialogContext.BeginDialogAsync(nameof(FindSlotsDialog), turnContext.Activity.Text, cancellationToken);
+                }
+                else
+                {
+                    // Unknown intent - provide helpful guidance
+                    await ShowUnknownIntentMessageAsync(turnContext, cancellationToken);
+                }
             }
         }
         
@@ -391,6 +416,23 @@ namespace InterviewBot.Bot
         {
             var greetingKeywords = new[] { "hello", "hi", "hey", "good morning", "good afternoon", "good evening", "start" };
             return greetingKeywords.Any(keyword => message.Contains(keyword));
+        }
+
+        private bool IsSlotFindingIntent(string message)
+        {
+            var slotFindingKeywords = new[] { "find slots", "find time", "availability", "available", "free time", "when can", "show slots" };
+            return slotFindingKeywords.Any(keyword => message.Contains(keyword));
+        }
+
+        private bool ContainsTimeOrDayReference(string message)
+        {
+            var timeReferences = new[] { 
+                "morning", "afternoon", "evening", "today", "tomorrow", "monday", "tuesday", "wednesday", 
+                "thursday", "friday", "saturday", "sunday", "next week", "this week", "next monday",
+                "next tuesday", "next wednesday", "next thursday", "next friday", "am", "pm", 
+                "time", "slot", "minute", "hour"
+            };
+            return timeReferences.Any(keyword => message.Contains(keyword));
         }
         
         private string RemoveBotMentions(string message, ITurnContext turnContext)
@@ -426,12 +468,19 @@ namespace InterviewBot.Bot
                             "📅 **View Interviews**\n" +
                             "   • Type: `view`, `list`, `my interviews`\n" +
                             "   • See your upcoming scheduled interviews\n\n" +
+                            "🔍 **Find Available Slots** *(NEW!)*\n" +
+                            "   • Use natural language like:\n" +
+                            "   • \"Find slots on Thursday afternoon\"\n" +
+                            "   • \"Are there any slots next Monday?\"\n" +
+                            "   • \"Show me morning availability tomorrow\"\n" +
+                            "   • \"Find a 30-minute slot this week\"\n\n" +
                             "❌ **Cancel Interview** *(Coming Soon)*\n" +
                             "   • Type: `cancel`, `remove`\n" +
                             "   • Cancel or reschedule existing interviews\n\n" +
-                            "🔍 **Find Availability** *(Coming Soon)*\n" +
-                            "   • Type: `availability`, `free time`\n" +
-                            "   • Check when participants are available\n\n" +
+                            "**🤖 Natural Language Features:**\n" +
+                            "• I understand conversational queries about time and availability\n" +
+                            "• I can explain scheduling conflicts and suggest alternatives\n" +
+                            "• I provide detailed availability information in human-readable format\n\n" +
                             "**Tips:**\n" +
                             "• I understand natural language - just tell me what you want to do!\n" +
                             "• I can handle multiple participants and complex scheduling\n" +
