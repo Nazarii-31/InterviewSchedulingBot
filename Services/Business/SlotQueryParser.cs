@@ -1,4 +1,5 @@
 using InterviewSchedulingBot.Services.Integration;
+using InterviewSchedulingBot.Models;
 
 namespace InterviewSchedulingBot.Services.Business
 {
@@ -13,14 +14,14 @@ namespace InterviewSchedulingBot.Services.Business
             _logger = logger;
         }
         
-        public async Task<SlotQueryCriteria?> ParseQueryAsync(string query)
+        public async Task<SlotQueryCriteria?> ParseQueryAsync(string query, CancellationToken cancellationToken = default)
         {
             try
             {
                 _logger.LogInformation("Parsing slot query: {Query}", query);
                 
                 var response = await _openWebUIClient.ProcessQueryAsync(
-                    query, OpenWebUIRequestType.SlotQuery);
+                    query, OpenWebUIRequestType.SlotQuery, cancellationToken);
                 
                 if (!response.Success)
                 {

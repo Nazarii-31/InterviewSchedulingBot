@@ -58,7 +58,7 @@ namespace InterviewBot.Bot.Dialogs
             try
             {
                 // Parse the query to extract criteria
-                var criteria = await _queryParser.ParseQueryAsync(query);
+                var criteria = await _queryParser.ParseQueryAsync(query, cancellationToken);
                 
                 if (criteria == null)
                 {
@@ -169,7 +169,8 @@ namespace InterviewBot.Bot.Dialogs
                     var conflictResponse = await _responseGenerator.GenerateConflictResponseAsync(
                         participantIds,
                         participantAvailability,
-                        criteria);
+                        criteria,
+                        cancellationToken);
                     
                     await stepContext.Context.SendActivityAsync(
                         MessageFactory.Text(conflictResponse),
@@ -182,7 +183,8 @@ namespace InterviewBot.Bot.Dialogs
                     // Generate slot response
                     var slotResponse = await _responseGenerator.GenerateSlotResponseAsync(
                         slots,
-                        criteria);
+                        criteria,
+                        cancellationToken);
                     
                     await stepContext.Context.SendActivityAsync(
                         MessageFactory.Text(slotResponse),

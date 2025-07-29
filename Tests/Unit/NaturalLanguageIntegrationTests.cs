@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using InterviewSchedulingBot.Services.Business;
 using InterviewSchedulingBot.Services.Integration;
+using InterviewSchedulingBot.Models;
 using Moq;
 using System.Net.Http;
 

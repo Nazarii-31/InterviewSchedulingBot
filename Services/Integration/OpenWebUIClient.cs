@@ -1,12 +1,13 @@
 using System.Text;
 using System.Text.Json;
+using InterviewSchedulingBot.Models;
 
 namespace InterviewSchedulingBot.Services.Integration
 {
     public interface IOpenWebUIClient
     {
-        Task<OpenWebUIResponse> ProcessQueryAsync(string query, OpenWebUIRequestType requestType);
-        Task<string> GenerateResponseAsync(string prompt, object context);
+        Task<OpenWebUIResponse> ProcessQueryAsync(string query, OpenWebUIRequestType requestType, CancellationToken cancellationToken = default);
+        Task<string> GenerateResponseAsync(string prompt, object context, CancellationToken cancellationToken = default);
     }
 
     public class OpenWebUIClient : IOpenWebUIClient
@@ -38,16 +39,25 @@ namespace InterviewSchedulingBot.Services.Integration
             }
         }
         
-        public async Task<OpenWebUIResponse> ProcessQueryAsync(string query, OpenWebUIRequestType requestType)
+        public async Task<OpenWebUIResponse> ProcessQueryAsync(string query, OpenWebUIRequestType requestType, CancellationToken cancellationToken = default)
         {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
             try
             {
                 _logger.LogInformation("Processing query with Open WebUI: {Query}, Type: {Type}", query, requestType);
                 
+                var maxTokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 500);
+                var temperature = _configuration.GetValue<double>("OpenWebUI:Temperature", 0.7);
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                
                 var request = new OpenWebUIRequest
                 {
                     Query = query,
-                    Type = requestType.ToString()
+                    Type = requestType,
+                    MaxTokens = maxTokens,
+                    Temperature = temperature,
+                    Timeout = timeoutMs
                 };
                 
                 var content = new StringContent(
@@ -55,41 +65,65 @@ namespace InterviewSchedulingBot.Services.Integration
                     Encoding.UTF8,
                     "application/json");
                 
-                var response = await _httpClient.PostAsync("process", content);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromMilliseconds(timeoutMs));
+                
+                var response = await _httpClient.PostAsync("process", content, cts.Token);
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    var responseContent = await response.Content.ReadAsStringAsync();
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
                     var result = JsonSerializer.Deserialize<OpenWebUIResponse>(responseContent, 
                         new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
                     
-                    return result ?? CreateFallbackResponse(query, requestType);
+                    if (result != null)
+                    {
+                        result.ProcessingTime = stopwatch.Elapsed.TotalSeconds;
+                        return result;
+                    }
                 }
                 else
                 {
                     _logger.LogWarning("Open WebUI API returned error: {StatusCode}", response.StatusCode);
-                    return CreateFallbackResponse(query, requestType);
                 }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning("Query processing was cancelled by user");
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Query processing timed out");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing query with Open WebUI API");
-                return CreateFallbackResponse(query, requestType);
             }
+            
+            var fallbackResponse = CreateFallbackResponse(query, requestType);
+            fallbackResponse.ProcessingTime = stopwatch.Elapsed.TotalSeconds;
+            return fallbackResponse;
         }
         
-        public async Task<string> GenerateResponseAsync(string prompt, object context)
+        public async Task<string> GenerateResponseAsync(string prompt, object context, CancellationToken cancellationToken = default)
         {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
             try
             {
                 _logger.LogInformation("Generating response with Open WebUI");
+                
+                var maxTokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 500);
+                var temperature = _configuration.GetValue<double>("OpenWebUI:Temperature", 0.7);
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
                 
                 var request = new
                 {
                     Prompt = prompt,
                     Context = context,
-                    MaxTokens = 500,
-                    Temperature = 0.7
+                    MaxTokens = maxTokens,
+                    Temperature = temperature
                 };
                 
                 var content = new StringContent(
@@ -97,27 +131,44 @@ namespace InterviewSchedulingBot.Services.Integration
                     Encoding.UTF8,
                     "application/json");
                 
-                var response = await _httpClient.PostAsync("generate", content);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                cts.CancelAfter(TimeSpan.FromMilliseconds(timeoutMs));
+                
+                var response = await _httpClient.PostAsync("generate", content, cts.Token);
                 
                 if (response.IsSuccessStatusCode)
                 {
-                    var responseContent = await response.Content.ReadAsStringAsync();
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
                     using var document = JsonDocument.Parse(responseContent);
                     
                     if (document.RootElement.TryGetProperty("text", out var textElement))
                     {
-                        return textElement.GetString() ?? CreateFallbackTextResponse(context);
+                        var result = textElement.GetString();
+                        if (!string.IsNullOrEmpty(result))
+                        {
+                            _logger.LogInformation("Generated response in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+                            return result;
+                        }
                     }
                 }
                 
                 _logger.LogWarning("Open WebUI API generate returned error: {StatusCode}", response.StatusCode);
-                return CreateFallbackTextResponse(context);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogWarning("Response generation was cancelled by user");
+                throw;
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("Response generation timed out");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating response with Open WebUI API");
-                return CreateFallbackTextResponse(context);
             }
+            
+            return CreateFallbackTextResponse(context);
         }
 
         private OpenWebUIResponse CreateFallbackResponse(string query, OpenWebUIRequestType requestType)
@@ -142,7 +193,9 @@ namespace InterviewSchedulingBot.Services.Integration
             var response = new OpenWebUIResponse
             {
                 Success = true,
-                Message = "Parsed using fallback logic"
+                Message = "Parsed using fallback logic",
+                GeneratedText = "Fallback parsing completed",
+                TokensUsed = 0
             };
 
             // Extract basic information from query
@@ -197,7 +250,9 @@ namespace InterviewSchedulingBot.Services.Integration
             return new OpenWebUIResponse
             {
                 Success = true,
-                Message = "Conflict analysis completed using fallback logic"
+                Message = "Conflict analysis completed using fallback logic",
+                GeneratedText = "Conflict analysis fallback completed",
+                TokensUsed = 0
             };
         }
 
@@ -206,7 +261,9 @@ namespace InterviewSchedulingBot.Services.Integration
             return new OpenWebUIResponse
             {
                 Success = true,
-                Message = "Response generated using fallback logic"
+                Message = "Response generated using fallback logic",
+                GeneratedText = "Fallback response generated",
+                TokensUsed = 0
             };
         }
 
@@ -214,37 +271,5 @@ namespace InterviewSchedulingBot.Services.Integration
         {
             return "I found some scheduling options for you. Let me know if you'd like to see more details or try different criteria.";
         }
-    }
-
-    public class OpenWebUIRequest
-    {
-        public string Query { get; set; } = string.Empty;
-        public string Type { get; set; } = string.Empty;
-    }
-
-    public class OpenWebUIResponse
-    {
-        public bool Success { get; set; }
-        public string Message { get; set; } = string.Empty;
-        public DateRange? DateRange { get; set; }
-        public string? TimeOfDay { get; set; }
-        public List<string>? Participants { get; set; }
-        public int? MinRequiredParticipants { get; set; }
-        public int? Duration { get; set; }
-        public string? SpecificDay { get; set; }
-        public string? RelativeDay { get; set; }
-    }
-
-    public class DateRange
-    {
-        public DateTime Start { get; set; }
-        public DateTime End { get; set; }
-    }
-
-    public enum OpenWebUIRequestType
-    {
-        SlotQuery,
-        ConflictAnalysis,
-        ResponseGeneration
     }
 }

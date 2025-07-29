@@ -18,7 +18,8 @@ namespace InterviewSchedulingBot.Services.Business
         
         public async Task<string> GenerateSlotResponseAsync(
             List<RankedTimeSlot> slots, 
-            SlotQueryCriteria criteria)
+            SlotQueryCriteria criteria,
+            CancellationToken cancellationToken = default)
         {
             try
             {
@@ -26,7 +27,7 @@ namespace InterviewSchedulingBot.Services.Business
                 
                 if (!slots.Any())
                 {
-                    return await GenerateNoSlotsResponseAsync(criteria);
+                    return await GenerateNoSlotsResponseAsync(criteria, cancellationToken);
                 }
 
                 // Group slots by day
@@ -68,7 +69,7 @@ namespace InterviewSchedulingBot.Services.Business
                 };
                 
                 var prompt = "Generate a conversational response about available interview time slots";
-                var response = await _openWebUIClient.GenerateResponseAsync(prompt, context);
+                var response = await _openWebUIClient.GenerateResponseAsync(prompt, context, cancellationToken);
                 
                 // If Open WebUI is not available, create a fallback response
                 if (string.IsNullOrWhiteSpace(response) || response.Contains("fallback"))
@@ -88,7 +89,8 @@ namespace InterviewSchedulingBot.Services.Business
         public async Task<string> GenerateConflictResponseAsync(
             List<string> participants,
             Dictionary<string, List<TimeSlot>> participantAvailability,
-            SlotQueryCriteria criteria)
+            SlotQueryCriteria criteria,
+            CancellationToken cancellationToken = default)
         {
             try
             {
@@ -147,7 +149,7 @@ namespace InterviewSchedulingBot.Services.Business
                 };
                 
                 var prompt = "Generate a conversational response explaining scheduling conflicts and suggesting alternatives";
-                var response = await _openWebUIClient.GenerateResponseAsync(prompt, context);
+                var response = await _openWebUIClient.GenerateResponseAsync(prompt, context, cancellationToken);
                 
                 // If Open WebUI is not available, create a fallback response
                 if (string.IsNullOrWhiteSpace(response) || response.Contains("fallback"))
@@ -164,7 +166,7 @@ namespace InterviewSchedulingBot.Services.Business
             }
         }
 
-        private async Task<string> GenerateNoSlotsResponseAsync(SlotQueryCriteria criteria)
+        private async Task<string> GenerateNoSlotsResponseAsync(SlotQueryCriteria criteria, CancellationToken cancellationToken = default)
         {
             var timeConstraint = criteria.TimeOfDay != null 
                 ? $" in the {criteria.TimeOfDay.Start:hh\\:mm}-{criteria.TimeOfDay.End:hh\\:mm} time range"

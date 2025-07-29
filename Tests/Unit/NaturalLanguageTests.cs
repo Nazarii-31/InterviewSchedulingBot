@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using InterviewSchedulingBot.Services.Business;
 using InterviewSchedulingBot.Services.Integration;
+using InterviewSchedulingBot.Models;
 using Moq;
 using System.Net.Http;
 
@@ -40,7 +41,7 @@ namespace InterviewSchedulingBot.Tests.Unit
             };
 
             _mockOpenWebUIClient
-                .Setup(x => x.ProcessQueryAsync(query, OpenWebUIRequestType.SlotQuery))
+                .Setup(x => x.ProcessQueryAsync(query, OpenWebUIRequestType.SlotQuery, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(mockResponse);
 
             // Act
@@ -69,7 +70,7 @@ namespace InterviewSchedulingBot.Tests.Unit
             };
 
             _mockOpenWebUIClient
-                .Setup(x => x.ProcessQueryAsync(query, OpenWebUIRequestType.SlotQuery))
+                .Setup(x => x.ProcessQueryAsync(query, OpenWebUIRequestType.SlotQuery, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(mockResponse);
 
             // Act
@@ -95,7 +96,7 @@ namespace InterviewSchedulingBot.Tests.Unit
             };
 
             _mockOpenWebUIClient
-                .Setup(x => x.ProcessQueryAsync(query, OpenWebUIRequestType.SlotQuery))
+                .Setup(x => x.ProcessQueryAsync(query, OpenWebUIRequestType.SlotQuery, It.IsAny<CancellationToken>()))
                 .ReturnsAsync(mockResponse);
 
             // Act

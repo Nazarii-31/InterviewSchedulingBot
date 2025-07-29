@@ -1,5 +1,6 @@
 using InterviewSchedulingBot.Services.Business;
 using InterviewSchedulingBot.Services.Integration;
+using InterviewSchedulingBot.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Primitives;
