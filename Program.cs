@@ -1,7 +1,6 @@
 using Microsoft.Bot.Builder;
 using Microsoft.Bot.Builder.Integration.AspNet.Core;
 using Microsoft.Bot.Connector.Authentication;
-using InterviewSchedulingBot.Bots;
 using InterviewSchedulingBot.Services;
 using InterviewSchedulingBot.Interfaces;
 using InterviewSchedulingBot.Interfaces.Integration;
@@ -9,8 +8,71 @@ using InterviewSchedulingBot.Interfaces.Business;
 using InterviewSchedulingBot.Services.Integration;
 using InterviewSchedulingBot.Services.Business;
 using Microsoft.OpenApi.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
+
+// Clean Architecture imports
+using MediatR;
+using InterviewBot.Domain.Interfaces;
+using InterviewBot.Persistence;
+using InterviewBot.Persistence.Repositories;
+using InterviewBot.Infrastructure.Calendar;
+using InterviewBot.Infrastructure.Scheduling;
+using InterviewBot.Infrastructure.Caching;
+using InterviewBot.Infrastructure.Telemetry;
+using InterviewBot.Bot.State;
+using InterviewBot.Bot;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+builder.Services.AddControllers().AddNewtonsoftJson();
+
+// Add Memory Cache for caching
+builder.Services.AddMemoryCache();
+
+// === CLEAN ARCHITECTURE SETUP ===
+
+// Add MediatR for CQRS
+builder.Services.AddMediatR(cfg => {
+    cfg.RegisterServicesFromAssembly(typeof(Program).Assembly);
+});
+
+// Add Entity Framework with SQLite
+builder.Services.AddDbContext<InterviewBotDbContext>(options =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+        ?? "Data Source=InterviewBot.db";
+    options.UseSqlite(connectionString);
+});
+
+// Register Unit of Work and Repositories
+builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
+builder.Services.AddScoped<IInterviewRepository, InterviewRepository>();
+builder.Services.AddScoped<IParticipantRepository, ParticipantRepository>();
+builder.Services.AddScoped<IAvailabilityRepository, AvailabilityRepository>();
+
+// Register Domain Services with caching
+builder.Services.AddScoped<ICalendarService, GraphCalendarService>();
+builder.Services.AddScoped<AvailabilityService>(); // Base service
+builder.Services.AddScoped<IAvailabilityService>(provider =>
+{
+    var baseService = provider.GetRequiredService<AvailabilityService>();
+    var cache = provider.GetRequiredService<IMemoryCache>();
+    var logger = provider.GetRequiredService<ILogger<CachedAvailabilityService>>();
+    return new CachedAvailabilityService(baseService, cache, logger);
+});
+builder.Services.AddScoped<ISchedulingService, SchedulingService>();
+builder.Services.AddScoped<ITelemetryService, TelemetryService>();
+
+// Register Infrastructure Services
+builder.Services.AddScoped<IGraphClientFactory, GraphClientFactory>();
+builder.Services.AddScoped<OptimalSlotFinder>();
+
+// Register Bot State Accessors
+builder.Services.AddSingleton<BotStateAccessors>();
+
+// === EXISTING SERVICES ===
 
 // Add services to the container.
 builder.Services.AddControllers().AddNewtonsoftJson();
@@ -78,9 +140,26 @@ else
 builder.Services.AddSingleton<ISchedulingBusinessService, SchedulingBusinessService>();
 
 // Create the bot as a transient. In this case the ASP Controller is expecting an IBot.
-builder.Services.AddTransient<IBot, InterviewBot>();
+// Use the enhanced bot with Clean Architecture integration
+builder.Services.AddTransient<IBot, InterviewSchedulingBotEnhanced>();
 
 var app = builder.Build();
+
+// === DATABASE INITIALIZATION ===
+// Ensure database is created and apply migrations
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<InterviewBotDbContext>();
+        dbContext.Database.EnsureCreated();
+        app.Logger.LogInformation("✓ Database initialized successfully");
+    }
+    catch (Exception ex)
+    {
+        app.Logger.LogError(ex, "❌ Failed to initialize database");
+    }
+}
 
 
 
