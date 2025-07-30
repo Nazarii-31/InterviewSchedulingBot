@@ -15,234 +15,74 @@
         </header>
 
         <div class="tabs">
-            <button class="tab-button active" onclick="openTab(event, 'find-slots')">
-                <i class="fas fa-search"></i> Find Optimal Slots
-            </button>
-            <button class="tab-button" onclick="openTab(event, 'validate')">
-                <i class="fas fa-check-circle"></i> Validate Request
-            </button>
-            <button class="tab-button" onclick="openTab(event, 'analyze-conflicts')">
-                <i class="fas fa-exclamation-triangle"></i> Analyze Conflicts
+            <button class="tab-button active" onclick="openTab(event, 'chat-test')">
+                <i class="fas fa-comments"></i> Chat Interface
             </button>
             <button class="tab-button" onclick="openTab(event, 'mock-data')">
                 <i class="fas fa-database"></i> Mock Data
             </button>
         </div>
 
-        <!-- Find Optimal Slots Tab -->
-        <div id="find-slots" class="tab-content active">
+        <!-- Chat Interface Tab -->
+        <div id="chat-test" class="tab-content active">
             <div class="tab-description">
-                <h3><i class="fas fa-info-circle"></i> Find Optimal Slots</h3>
-                <p>This tab finds the best available time slots for interviews by analyzing all participants' calendars. 
-                   It considers working hours, existing meetings, and preferences to suggest optimal meeting times. 
-                   Perfect for scheduling interviews when you need to coordinate multiple people's availability.</p>
+                <h3><i class="fas fa-info-circle"></i> Chat Interface Testing</h3>
+                <p>Test the bot's natural language processing capabilities using the chat interface. 
+                   The bot uses AI-powered responses to understand your requests and provide intelligent scheduling assistance. 
+                   Try asking in natural language like "Find slots on Thursday afternoon" or "Are there any openings next Monday?"</p>
             </div>
             
-            <div class="form-section">
-                <h3><i class="fas fa-clock"></i> Schedule Interview</h3>
-                <form id="scheduling-form">
-                    <div class="form-group">
-                        <label for="participants">Participant Emails (one per line):</label>
-                        <textarea id="participants" rows="4" placeholder="john.doe@company.com&#10;jane.smith@company.com&#10;interviewer@company.com">john.doe@company.com
-jane.smith@company.com
-interviewer@company.com</textarea>
+            <div class="chat-interface-section">
+                <div class="chat-access-info">
+                    <h3><i class="fas fa-comments"></i> Interactive Chat Testing</h3>
+                    <p>Use the dedicated chat interface to test all natural language capabilities:</p>
+                    
+                    <div class="chat-link-container">
+                        <a href="/api/chat" target="_blank" class="btn-chat-link">
+                            <i class="fas fa-external-link-alt"></i> Open Chat Interface
+                        </a>
+                        <span class="chat-link-description">Opens in new tab - Teams-like interface for conversational testing</span>
                     </div>
                     
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="duration">Duration (minutes):</label>
-                            <select id="duration">
-                                <option value="30">30 minutes</option>
-                                <option value="60" selected>60 minutes</option>
-                                <option value="90">90 minutes</option>
-                                <option value="120">120 minutes</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="interview-type">Interview Type:</label>
-                            <select id="interview-type">
-                                <option value="General" selected>General</option>
-                                <option value="Technical">Technical</option>
-                                <option value="Behavioral">Behavioral</option>
-                                <option value="Panel">Panel</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="priority">Priority:</label>
-                            <select id="priority">
-                                <option value="Low">Low</option>
-                                <option value="Normal" selected>Normal</option>
-                                <option value="High">High</option>
-                                <option value="Urgent">Urgent</option>
-                            </select>
+                    <div class="example-queries">
+                        <h4><i class="fas fa-lightbulb"></i> Example Natural Language Queries to Try:</h4>
+                        <div class="query-examples">
+                            <div class="query-item">"Find slots on Thursday afternoon"</div>
+                            <div class="query-item">"Are there any slots next Monday?"</div>
+                            <div class="query-item">"Show me morning availability tomorrow"</div>
+                            <div class="query-item">"Find a 30-minute slot this week"</div>
+                            <div class="query-item">"Schedule an interview with John and Jane"</div>
+                            <div class="query-item">"Help me find time for a technical interview"</div>
+                            <div class="query-item">"What slots are available Friday morning?"</div>
+                            <div class="query-item">"I need to schedule a 90-minute panel interview"</div>
                         </div>
                     </div>
                     
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="earliest-date">Earliest Date:</label>
-                            <input type="datetime-local" id="earliest-date" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="latest-date">Latest Date:</label>
-                            <input type="datetime-local" id="latest-date" required>
-                        </div>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="requester-id">Requester ID (optional):</label>
-                            <input type="text" id="requester-id" placeholder="requester@company.com">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="department">Department (optional):</label>
-                            <input type="text" id="department" placeholder="Engineering">
-                        </div>
-                    </div>
-                    
-                    <button type="submit" class="btn-primary">
-                        <i class="fas fa-search"></i> Find Optimal Slots
-                    </button>
-                </form>
-            </div>
-            
-            <div id="scheduling-results" class="results-section" style="display: none;">
-                <div class="results-legend">
-                    <div class="legend-item">
-                        <i class="fas fa-percentage"></i>
-                        <strong>Quality Score:</strong> Time slot quality based on working hours alignment, calendar availability, and optimal timing (morning slots score higher)
-                    </div>
-                    <div class="legend-item">
-                        <i class="fas fa-users"></i>
-                        <strong>Availability:</strong> Number of participants available out of total requested participants
+                    <div class="features-info">
+                        <h4><i class="fas fa-robot"></i> AI-Powered Features to Test:</h4>
+                        <ul class="features-list">
+                            <li><strong>Natural Language Understanding:</strong> Ask in your own words, the bot understands context</li>
+                            <li><strong>Dynamic Responses:</strong> Every response is AI-generated based on your specific situation</li>
+                            <li><strong>Contextual Awareness:</strong> Bot remembers conversation history for coherent follow-ups</li>
+                            <li><strong>Intelligent Recommendations:</strong> AI explains why certain slots are suggested</li>
+                            <li><strong>Error Guidance:</strong> Helpful, context-specific error messages with actionable suggestions</li>
+                            <li><strong>Adaptive Communication:</strong> Response style adapts to conversation flow</li>
+                        </ul>
                     </div>
                 </div>
                 
-                <h3><i class="fas fa-calendar-check"></i> Recommended Time Slots</h3>
-                <div id="recommended-slots"></div>
-                
-                <h3><i class="fas fa-calendar-plus"></i> Alternative Slots</h3>
-                <div id="alternative-slots"></div>
-                
-                <h3><i class="fas fa-lightbulb"></i> Business Insights</h3>
-                <div id="business-insights"></div>
-            </div>
-        </div>
-
-        <!-- Validate Request Tab -->
-        <div id="validate" class="tab-content">
-            <div class="tab-description">
-                <h3><i class="fas fa-info-circle"></i> Validate Request</h3>
-                <p>This tab validates scheduling requests to ensure they meet business requirements and constraints. 
-                   It checks for proper participant formats, reasonable duration limits, valid date ranges, 
-                   and other business rules. Use this to verify your request is properly formatted before scheduling.</p>
-            </div>
-            
-            <div class="form-section">
-                <h3><i class="fas fa-check-circle"></i> Validate Scheduling Request</h3>
-                <form id="validation-form">
-                    <div class="form-group">
-                        <label for="val-participants">Participant Emails (one per line):</label>
-                        <textarea id="val-participants" rows="4" placeholder="john.doe@company.com&#10;jane.smith@company.com">john.doe@company.com
-jane.smith@company.com</textarea>
+                <!-- Embedded preview of chat interface -->
+                <div class="chat-preview-section">
+                    <h4><i class="fas fa-eye"></i> Chat Interface Preview</h4>
+                    <div class="chat-preview-frame">
+                        <iframe src="/api/chat" width="100%" height="600" frameborder="0"></iframe>
                     </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="val-duration">Duration (minutes):</label>
-                            <input type="number" id="val-duration" value="60" min="1" max="480">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="val-type">Interview Type:</label>
-                            <select id="val-type">
-                                <option value="General" selected>General</option>
-                                <option value="Technical">Technical</option>
-                                <option value="Behavioral">Behavioral</option>
-                                <option value="Panel">Panel</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="val-earliest">Earliest Date:</label>
-                            <input type="datetime-local" id="val-earliest" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="val-latest">Latest Date:</label>
-                            <input type="datetime-local" id="val-latest" required>
-                        </div>
-                    </div>
-                    
-                    <button type="submit" class="btn-primary">
-                        <i class="fas fa-check"></i> Validate Request
-                    </button>
-                </form>
-            </div>
-            
-            <div id="validation-results" class="results-section" style="display: none;">
-                <div id="validation-status"></div>
-                <div id="validation-errors"></div>
-                <div id="validation-warnings"></div>
-                <div id="validation-suggestions"></div>
-            </div>
-        </div>
-
-        <!-- Analyze Conflicts Tab -->
-        <div id="analyze-conflicts" class="tab-content">
-            <div class="tab-description">
-                <h3><i class="fas fa-info-circle"></i> Analyze Conflicts</h3>
-                <p>This tab analyzes potential scheduling conflicts for a specific proposed meeting time. 
-                   It checks if participants have conflicting meetings, are in different time zones, 
-                   or have availability issues. Use this when you have a specific time in mind and want to verify it works for everyone.</p>
-            </div>
-            
-            <div class="form-section">
-                <h3><i class="fas fa-exclamation-triangle"></i> Analyze Scheduling Conflicts</h3>
-                <p class="info-text">
-                    <i class="fas fa-info-circle"></i>
-                    Note: This feature requires Teams bot context for full calendar access. 
-                    This demo shows the API interface structure.
-                </p>
-                <form id="conflict-form">
-                    <div class="form-group">
-                        <label for="conflict-participants">Participant Emails (one per line):</label>
-                        <textarea id="conflict-participants" rows="3" placeholder="john.doe@company.com&#10;jane.smith@company.com">john.doe@company.com
-jane.smith@company.com</textarea>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="proposed-time">Proposed Time:</label>
-                            <input type="datetime-local" id="proposed-time" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="conflict-duration">Duration (minutes):</label>
-                            <input type="number" id="conflict-duration" value="60" min="1" max="480">
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="access-token">Access Token (placeholder):</label>
-                        <input type="text" id="access-token" value="mock-token-for-demo" readonly>
-                    </div>
-                    
-                    <button type="submit" class="btn-primary">
-                        <i class="fas fa-search"></i> Analyze Conflicts
-                    </button>
-                </form>
-            </div>
-            
-            <div id="conflict-results" class="results-section" style="display: none;">
-                <div id="conflict-status"></div>
-                <div id="conflict-details"></div>
+                    <p class="preview-note">
+                        <i class="fas fa-info-circle"></i> 
+                        This is a live preview of the chat interface. For full functionality, 
+                        <a href="/api/chat" target="_blank">open in new tab</a>.
+                    </p>
+                </div>
             </div>
         </div>
 
