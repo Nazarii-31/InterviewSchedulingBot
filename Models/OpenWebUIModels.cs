@@ -28,6 +28,30 @@ namespace InterviewSchedulingBot.Models
         public double ProcessingTime { get; set; } // in seconds
     }
 
+    public class MessageHistoryItem
+    {
+        public string Message { get; set; } = string.Empty;
+        public bool IsFromBot { get; set; }
+        public DateTime Timestamp { get; set; }
+    }
+
+    public class ConflictDetail
+    {
+        public DateTime StartTime { get; set; }
+        public DateTime EndTime { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Participant { get; set; } = string.Empty;
+    }
+
+    public class TimeSlot
+    {
+        public DateTime StartTime { get; set; }
+        public DateTime EndTime { get; set; }
+        public double AvailabilityScore { get; set; }
+        public List<string> AvailableParticipants { get; set; } = new List<string>();
+        public int TotalParticipants { get; set; }
+    }
+
     public class DateRange
     {
         public DateTime Start { get; set; }

@@ -75,6 +75,9 @@ builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.SlotQueryPar
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ConversationalResponseGenerator>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.IAIResponseService, InterviewSchedulingBot.Services.Business.AIResponseService>();
 
+// Register Conversation Store
+builder.Services.AddSingleton<InterviewSchedulingBot.Interfaces.IConversationStore, InterviewSchedulingBot.Services.InMemoryConversationStore>();
+
 // Register Bot State Accessors
 builder.Services.AddSingleton<BotStateAccessors>();
 

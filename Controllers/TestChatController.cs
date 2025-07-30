@@ -272,8 +272,9 @@ namespace InterviewSchedulingBot.Controllers
         }
 
         .message-avatar {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
             border-radius: 50%;
             margin: 0 8px;
             display: flex;
@@ -289,15 +290,16 @@ namespace InterviewSchedulingBot.Controllers
         }
 
         .message.bot .message-avatar {
-            background-color: #464775;
+            background-color: #6264f3;
         }
 
         .message-content {
-            max-width: 70%;
+            max-width: 80%;
             padding: 12px 16px;
-            border-radius: 8px;
+            border-radius: 18px;
             position: relative;
             word-wrap: break-word;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
 
         .message.user .message-content {
@@ -307,21 +309,34 @@ namespace InterviewSchedulingBot.Controllers
         }
 
         .message.bot .message-content {
-            background-color: white;
+            background-color: #f0f2ff;
             color: #323130;
-            border: 1px solid #e1dfdd;
             border-bottom-left-radius: 4px;
         }
 
         .message-text {
-            line-height: 1.4;
+            line-height: 1.5;
             white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 0.95rem;
         }
 
         .message-timestamp {
-            font-size: 11px;
-            opacity: 0.7;
-            margin-top: 4px;
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .card-attachment {
+            margin-top: 8px;
+        }
+
+        .adaptive-card {
+            background-color: white;
+            border: 1px solid #e1dfdd;
+            border-radius: 8px;
+            padding: 12px;
         }
 
         .input-container {
@@ -368,33 +383,7 @@ namespace InterviewSchedulingBot.Controllers
             cursor: not-allowed;
         }
 
-        .examples-panel {
-            background-color: #fff4ce;
-            border: 1px solid #fed100;
-            border-radius: 4px;
-            padding: 16px;
-            margin: 16px 0;
-        }
 
-        .examples-title {
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #323130;
-        }
-
-        .example-query {
-            background-color: #f8f8f8;
-            border-radius: 4px;
-            padding: 8px 12px;
-            margin: 4px 0;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            border: 1px solid #e1dfdd;
-        }
-
-        .example-query:hover {
-            background-color: #e1dfdd;
-        }
 
         .typing-indicator {
             display: none;
@@ -583,24 +572,8 @@ namespace InterviewSchedulingBot.Controllers
 
         <!-- Chat Interface Tab -->
         <div id=""chat-interface"" class=""tab-content active"">
-            <div class=""info-panel"">
-                <h4><i class=""fas fa-info-circle""></i> AI-Powered Conversational Interface</h4>
-                <p>This interface demonstrates the bot's AI-driven natural language processing capabilities. 
-                   All responses are dynamically generated using AI without hardcoded templates. 
-                   Speak naturally and the bot will understand your scheduling needs.</p>
-            </div>
-            
             <div class=""chat-container"">
                 <div class=""messages-container"" id=""messagesContainer"">
-                    <div class=""examples-panel"">
-                        <div class=""examples-title"">💡 Try these natural language queries:</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Find slots on Thursday afternoon')"">Find slots on Thursday afternoon</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Are there any slots next Monday?')"">Are there any slots next Monday?</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Show me morning availability tomorrow')"">Show me morning availability tomorrow</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Find a 30-minute slot this week')"">Find a 30-minute slot this week</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Schedule an interview')"">Schedule an interview</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Help')"">Help</div>
-                    </div>
                     <div class=""typing-indicator"" id=""typingIndicator"">Bot is thinking...</div>
                 </div>
                 
@@ -723,7 +696,7 @@ namespace InterviewSchedulingBot.Controllers
         }
 
         function showWelcomeMessage() {
-            addMessage('Welcome to the AI-Powered Interview Scheduling Bot! 🤖\\n\\nI can help you find interview slots using natural language. Every response is generated by AI in real-time - no hardcoded templates! Try asking me something like:\\n\\n• ""Find slots on Thursday afternoon""\\n• ""Are there any slots next Monday?""\\n• ""Show me morning availability tomorrow""\\n\\nWhat would you like me to help you with today?', 'Interview Bot', true);
+            addMessage('Hello! 👋 I\'m your AI-powered Interview Scheduling assistant. I can help you find available time slots, schedule meetings, and manage your calendar using natural language. What would you like me to help you with today?', 'Interview Bot', true);
         }
 
         async function sendMessage() {
@@ -757,11 +730,13 @@ namespace InterviewSchedulingBot.Controllers
                     const data = await response.json();
                     conversationId = data.conversationId;
                     
-                    // Clear existing messages and show full history
-                    clearMessages();
-                    data.messages.forEach(msg => {
-                        addMessage(msg.text, msg.from, msg.isBot, msg.attachments);
-                    });
+                    // Only add the bot response (skip user message since it's already added)
+                    const botMessages = data.messages.filter(msg => msg.isBot);
+                    const lastBotMessage = botMessages[botMessages.length - 1];
+                    
+                    if (lastBotMessage && lastBotMessage.text && lastBotMessage.text.trim() !== '') {
+                        addMessage(lastBotMessage.text, lastBotMessage.from, lastBotMessage.isBot, lastBotMessage.attachments);
+                    }
                     
                     showStatus('Connected', 'connected');
                 } else {
@@ -778,27 +753,27 @@ namespace InterviewSchedulingBot.Controllers
             }
         }
 
-        function sendExampleQuery(query) {
-            const messageInput = document.getElementById('messageInput');
-            messageInput.value = query;
-            sendMessage();
-        }
-
         function addMessage(text, from, isBot, attachments = []) {
             const messagesContainer = document.getElementById('messagesContainer');
+            
+            // Don't add empty messages
+            if (!text || text.trim() === '') {
+                return;
+            }
+            
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isBot ? 'bot' : 'user'}`;
 
             const avatarDiv = document.createElement('div');
             avatarDiv.className = 'message-avatar';
-            avatarDiv.textContent = isBot ? '🤖' : 'U';
+            avatarDiv.textContent = isBot ? 'B' : 'U';
 
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
 
             const textDiv = document.createElement('div');
             textDiv.className = 'message-text';
-            textDiv.textContent = text || '';
+            textDiv.textContent = text;
 
             const timestampDiv = document.createElement('div');
             timestampDiv.className = 'message-timestamp';
@@ -806,6 +781,18 @@ namespace InterviewSchedulingBot.Controllers
 
             contentDiv.appendChild(textDiv);
             contentDiv.appendChild(timestampDiv);
+
+            // Handle attachments if present
+            if (attachments && attachments.length > 0) {
+                attachments.forEach(attachment => {
+                    if (attachment.contentType === 'application/vnd.microsoft.card.adaptive') {
+                        const cardDiv = document.createElement('div');
+                        cardDiv.className = 'card-attachment';
+                        cardDiv.innerHTML = '<div class=""adaptive-card"">' + formatAdaptiveCard(attachment.content) + '</div>';
+                        contentDiv.appendChild(cardDiv);
+                    }
+                });
+            }
 
             messageDiv.appendChild(avatarDiv);
             messageDiv.appendChild(contentDiv);
@@ -1018,6 +1005,29 @@ namespace InterviewSchedulingBot.Controllers
             link.click();
             URL.revokeObjectURL(url);
             showStatus('Mock data exported', 'connected');
+        }
+
+        function formatAdaptiveCard(content) {
+            // Simple adaptive card formatting for display
+            if (typeof content === 'object') {
+                return `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+            }
+            return content.toString();
+        }
+
+        function formatMarkdown(text) {
+            // Simple markdown formatting
+            return text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return new Date().toLocaleTimeString();
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString();
         }
     </script>
 </body>

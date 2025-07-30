@@ -37,5 +37,6 @@ namespace InterviewBot.Bot.State
         public string GraphUserId { get; set; } = string.Empty;
         public bool IsAuthenticated { get; set; }
         public DateTime LastActivity { get; set; } = DateTime.UtcNow;
+        public List<string> ConversationHistory { get; set; } = new List<string>();
     }
 }
