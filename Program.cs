@@ -197,6 +197,12 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// Set chat interface as default route instead of old dashboard
+app.MapGet("/", context => {
+    context.Response.Redirect("/api/chat");
+    return Task.CompletedTask;
+});
+
 // Log architectural information
 var architectureLogger = app.Services.GetRequiredService<ILogger<Program>>();
 architectureLogger.LogInformation("🏗️  Interview Scheduling Bot - Layered Architecture");

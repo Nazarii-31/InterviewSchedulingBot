@@ -64,4 +64,28 @@ namespace InterviewSchedulingBot.Models
         ConflictAnalysis,
         ResponseGeneration
     }
+
+    // New models for intent recognition and slot finding
+    public class IntentResponse
+    {
+        public string TopIntent { get; set; } = string.Empty;
+        public double Confidence { get; set; }
+        public Dictionary<string, object> Entities { get; set; } = new Dictionary<string, object>();
+    }
+
+    public class SlotParameters
+    {
+        public List<string>? Participants { get; set; }
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+        public int? DurationMinutes { get; set; }
+        public string? TimeOfDay { get; set; }
+        public string? SpecificDay { get; set; }
+        
+        public bool HasMinimumRequiredInfo()
+        {
+            // Need at least some time indication (start date, time of day, or specific day)
+            return StartDate.HasValue || !string.IsNullOrEmpty(TimeOfDay) || !string.IsNullOrEmpty(SpecificDay);
+        }
+    }
 }

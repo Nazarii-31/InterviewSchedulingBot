@@ -100,7 +100,10 @@ namespace InterviewBot.Bot
             ITurnContext<IMessageActivity> turnContext,
             CancellationToken cancellationToken)
         {
-            _logger.LogInformation("Received message: {Message}", turnContext.Activity.Text);
+            var userId = turnContext.Activity.From.Id;
+            var userMessage = turnContext.Activity.Text?.Trim();
+            
+            _logger.LogInformation("Received message: {Message}", userMessage);
             
             // Check if this is an adaptive card action
             if (turnContext.Activity.Value != null)
@@ -109,22 +112,7 @@ namespace InterviewBot.Bot
                 return;
             }
             
-            var userId = turnContext.Activity.From.Id;
-            var conversationId = turnContext.Activity.Conversation.Id;
-            var message = turnContext.Activity.Text?.Trim();
-            
-            // Get conversation history
-            var history = await _conversationStore.GetHistoryAsync(userId, conversationId);
-            
-            // Add current message to history
-            history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = message, IsFromBot = false, Timestamp = DateTime.UtcNow });
-            
-            // Update user activity
-            var userProfile = await _accessors.UserProfileAccessor.GetAsync(
-                turnContext, () => new UserProfile(), cancellationToken);
-            userProfile.LastActivity = DateTime.UtcNow;
-            
-            // Check for authentication first
+            // Check authentication first
             var isAuthenticated = await _authService.IsUserAuthenticatedAsync(userId);
             if (!isAuthenticated)
             {
@@ -132,31 +120,64 @@ namespace InterviewBot.Bot
                 return;
             }
             
-            // Check if message contains specific scheduling commands
-            if (ContainsSchedulingCommand(message))
-            {
-                // Handle specific scheduling functionality using dialogs
-                await ProcessSchedulingCommandAsync(turnContext, message, cancellationToken);
-            }
-            else 
-            {
-                // For ALL other messages, send directly to OpenWebUI
-                await turnContext.SendActivityAsync(new Activity { Type = ActivityTypes.Typing }, cancellationToken);
-                
-                var response = await _openWebUIClient.GetDirectResponseAsync(message, conversationId, history);
-                
-                await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
-                
-                // Add bot response to history
-                history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = response, IsFromBot = true, Timestamp = DateTime.UtcNow });
-            }
+            // Show typing indicator
+            await turnContext.SendActivityAsync(new Activity { Type = ActivityTypes.Typing }, cancellationToken);
             
-            // Save updated history
-            await _conversationStore.SaveHistoryAsync(userId, conversationId, history);
-            
-            // Save state
-            await _conversationState.SaveChangesAsync(turnContext, false, cancellationToken);
-            await _userState.SaveChangesAsync(turnContext, false, cancellationToken);
+            try
+            {
+                var conversationId = turnContext.Activity.Conversation.Id;
+                var history = await _conversationStore.GetHistoryAsync(userId, conversationId);
+                
+                // Add current message to history
+                history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = userMessage, IsFromBot = false, Timestamp = DateTime.UtcNow });
+                
+                // First, use OpenWebUI to determine the intent (DEFAULT processor)
+                var intentResponse = await _openWebUIClient.RecognizeIntentAsync(userMessage, history);
+                
+                switch (intentResponse.TopIntent)
+                {
+                    case "FindSlots":
+                        // Extract slot finding parameters and process
+                        var slotParams = await _openWebUIClient.ExtractSlotParametersAsync(userMessage, history);
+                        await ProcessSlotFindingAsync(turnContext, slotParams, history, cancellationToken);
+                        break;
+                        
+                    case "Help":
+                        await HandleHelpCommandAsync(turnContext, cancellationToken);
+                        break;
+                        
+                    case "Logout":
+                        await HandleLogoutAsync(turnContext, cancellationToken);
+                        break;
+                        
+                    default:
+                        // For any other intent, get a general response from OpenWebUI
+                        var response = await _openWebUIClient.GetDirectResponseAsync(userMessage, conversationId, history);
+                        await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+                        
+                        // Add bot response to history
+                        history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = response, IsFromBot = true, Timestamp = DateTime.UtcNow });
+                        break;
+                }
+                
+                // Save updated history
+                await _conversationStore.SaveHistoryAsync(userId, conversationId, history);
+                
+                // Update user activity and save state
+                var userProfile = await _accessors.UserProfileAccessor.GetAsync(
+                    turnContext, () => new UserProfile(), cancellationToken);
+                userProfile.LastActivity = DateTime.UtcNow;
+                
+                await _conversationState.SaveChangesAsync(turnContext, false, cancellationToken);
+                await _userState.SaveChangesAsync(turnContext, false, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing message");
+                await turnContext.SendActivityAsync(
+                    MessageFactory.Text("I encountered an issue processing your request. Please try again."), 
+                    cancellationToken);
+            }
         }
         
         private async Task HandleAdaptiveCardActionAsync(
@@ -370,13 +391,114 @@ namespace InterviewBot.Bot
         }
         
         
-        private bool ContainsSchedulingCommand(string message)
+        private async Task ProcessSlotFindingAsync(
+            ITurnContext turnContext,
+            SlotParameters parameters,
+            List<InterviewSchedulingBot.Models.MessageHistoryItem> history,
+            CancellationToken cancellationToken)
         {
-            if (string.IsNullOrEmpty(message)) return false;
+            try
+            {
+                // If we don't have enough parameters, ask for missing info
+                if (!parameters.HasMinimumRequiredInfo())
+                {
+                    var clarificationResponse = await _openWebUIClient.GenerateClarificationAsync(parameters, history);
+                    await turnContext.SendActivityAsync(MessageFactory.Text(clarificationResponse), cancellationToken);
+                    
+                    // Add bot response to history
+                    history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = clarificationResponse, IsFromBot = true, Timestamp = DateTime.UtcNow });
+                    return;
+                }
+                
+                // Prepare parameters for slot finding
+                var participantIds = parameters.Participants ?? new List<string>();
+                var startDate = parameters.StartDate ?? DateTime.Today;
+                var endDate = parameters.EndDate ?? startDate.AddDays(14);
+                var durationMinutes = parameters.DurationMinutes ?? 60;
+                
+                // If specific day is mentioned, adjust the date range
+                if (!string.IsNullOrEmpty(parameters.SpecificDay) && !parameters.StartDate.HasValue)
+                {
+                    var dayOfWeek = Enum.Parse<DayOfWeek>(parameters.SpecificDay, true);
+                    startDate = GetNextWeekday(DateTime.Today, dayOfWeek);
+                    endDate = startDate.AddDays(1);
+                }
+                
+                // Use the scheduling service to find optimal slots
+                var rankedSlots = await _schedulingService.FindOptimalSlotsAsync(
+                    participantIds,
+                    startDate,
+                    endDate,
+                    durationMinutes,
+                    10); // Max 10 results
+                    
+                string slotResponse;
+                if (rankedSlots.Any())
+                {
+                    // Convert RankedTimeSlot to TimeSlot for formatting
+                    var timeSlots = rankedSlots.Select(rs => new InterviewSchedulingBot.Models.TimeSlot
+                    {
+                        StartTime = rs.StartTime,
+                        EndTime = rs.EndTime,
+                        AvailabilityScore = rs.Score,
+                        AvailableParticipants = new List<string>(), // Would need participant names
+                        TotalParticipants = rs.TotalParticipants
+                    }).ToList();
+                    
+                    // Generate formatted response with actual slots using OpenWebUI
+                    slotResponse = await _openWebUIClient.FormatAvailableSlotsAsync(timeSlots, parameters);
+                }
+                else
+                {
+                    // Generate no slots response
+                    slotResponse = await _openWebUIClient.GenerateNoSlotsResponseAsync(parameters, history);
+                }
+                
+                await turnContext.SendActivityAsync(MessageFactory.Text(slotResponse), cancellationToken);
+                
+                // Add bot response to history
+                history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = slotResponse, IsFromBot = true, Timestamp = DateTime.UtcNow });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error finding slots");
+                var errorMessage = "I encountered an issue while finding available slots. Please try again with more specific details.";
+                await turnContext.SendActivityAsync(MessageFactory.Text(errorMessage), cancellationToken);
+                
+                // Add bot response to history
+                history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = errorMessage, IsFromBot = true, Timestamp = DateTime.UtcNow });
+            }
+        }
+
+        private static DateTime GetNextWeekday(DateTime start, DayOfWeek day)
+        {
+            // Calculate days to add to get to the next occurrence of the specified day
+            int daysToAdd = ((int)day - (int)start.DayOfWeek + 7) % 7;
+            if (daysToAdd == 0) daysToAdd = 7; // If it's the same day, get next week
+            return start.AddDays(daysToAdd);
+        }
+
+        private async Task HandleHelpCommandAsync(ITurnContext turnContext, CancellationToken cancellationToken)
+        {
+            var helpMessage = "I can help you find available time slots for interviews and meetings! Here's what I can do:\n\n" +
+                             "• Find available time slots using natural language\n" +
+                             "• Check calendar availability for multiple participants\n" +
+                             "• Suggest optimal meeting times\n\n" +
+                             "Just ask me in plain English, like:\n" +
+                             "• 'Find slots tomorrow morning'\n" +
+                             "• 'When can we meet for 90 minutes next week?'\n" +
+                             "• 'Show me availability for John and Sarah on Friday'";
             
-            var lowerMessage = message.ToLowerInvariant();
-            var schedulingKeywords = new[] { "schedule", "book", "find slots", "create interview", "plan meeting", "set up meeting" };
-            return schedulingKeywords.Any(keyword => lowerMessage.Contains(keyword));
+            await turnContext.SendActivityAsync(MessageFactory.Text(helpMessage), cancellationToken);
+        }
+
+        private async Task HandleLogoutAsync(ITurnContext turnContext, CancellationToken cancellationToken)
+        {
+            var userId = turnContext.Activity.From.Id;
+            await _authService.ClearTokenAsync(userId);
+            
+            var logoutMessage = "You have been logged out successfully. You'll need to authenticate again to use scheduling features.";
+            await turnContext.SendActivityAsync(MessageFactory.Text(logoutMessage), cancellationToken);
         }
         
         private async Task HandleAuthenticationAsync(ITurnContext turnContext, CancellationToken cancellationToken)

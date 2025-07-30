@@ -14,6 +14,13 @@ namespace InterviewSchedulingBot.Services.Integration
         Task<string> GetConversationalResponseAsync(string message, string conversationId, List<MessageHistoryItem> history, ConversationOptions options);
         Task<string> GetClarificationRequestAsync(string message, string context, List<MessageHistoryItem> history);
         Task<string> GenerateNoSlotsResponseAsync(InterviewSchedulingBot.Services.Business.SlotQueryCriteria criteria, List<MessageHistoryItem> history);
+        
+        // New methods for intent recognition and slot finding
+        Task<IntentResponse> RecognizeIntentAsync(string message, List<MessageHistoryItem> history);
+        Task<SlotParameters> ExtractSlotParametersAsync(string message, List<MessageHistoryItem> history);
+        Task<string> FormatAvailableSlotsAsync(List<TimeSlot> slots, SlotParameters parameters);
+        Task<string> GenerateClarificationAsync(SlotParameters parameters, List<MessageHistoryItem> history);
+        Task<string> GenerateNoSlotsResponseAsync(SlotParameters parameters, List<MessageHistoryItem> history);
     }
 
     public class OpenWebUIClient : IOpenWebUIClient
@@ -928,6 +935,412 @@ namespace InterviewSchedulingBot.Services.Integration
             {
                 $"I couldn't find any available slots that work for all participants during {criteria.SpecificDay ?? "the requested time"}. Here are some suggestions:\n\n• Try a different time range\n• Consider fewer participants\n• Look at alternative days\n• Split into multiple shorter meetings\n\nWould you like me to search with different criteria?",
                 $"Unfortunately, no slots are available that meet your requirements for {criteria.DurationMinutes} minutes. You might want to:\n\n• Expand the time window\n• Reduce the participant list\n• Consider scheduling on different days\n• Break into smaller sessions\n\nShall I help you explore other options?",
+                $"No matching slots found for your request. To increase availability, consider:\n\n• Flexible timing (earlier/later in the day)\n• Shorter meeting duration\n• Optional attendees\n• Alternative dates\n\nI'm happy to search again with adjusted parameters!"
+            };
+            
+            return noSlotsResponses[new Random().Next(noSlotsResponses.Length)];
+        }
+
+        // New methods for intent recognition and slot finding
+        public async Task<IntentResponse> RecognizeIntentAsync(string message, List<MessageHistoryItem> history)
+        {
+            // If OpenWebUI is not configured, use fallback intent recognition
+            if (!_isConfigured)
+            {
+                return RecognizeIntentFallback(message);
+            }
+
+            try
+            {
+                var request = new
+                {
+                    message = message,
+                    history = history.Select(h => new { role = h.IsFromBot ? "assistant" : "user", content = h.Message }).ToArray(),
+                    task = "intent_recognition",
+                    system_prompt = "Classify the user's intent. Return one of: FindSlots, Help, Logout, General. For any request about finding time, availability, slots, scheduling, or meeting times, return FindSlots."
+                };
+
+                var content = new StringContent(
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+
+                var response = await _httpClient.PostAsync("intent", content, cts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+
+                    if (responseObj.TryGetProperty("intent", out var intentElement))
+                    {
+                        var intent = intentElement.GetString() ?? "";
+                        var confidence = responseObj.TryGetProperty("confidence", out var confElement) ? confElement.GetDouble() : 0.8;
+                        
+                        return new IntentResponse
+                        {
+                            TopIntent = intent,
+                            Confidence = confidence
+                        };
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error recognizing intent from OpenWebUI");
+            }
+
+            return RecognizeIntentFallback(message);
+        }
+
+        public async Task<SlotParameters> ExtractSlotParametersAsync(string message, List<MessageHistoryItem> history)
+        {
+            // If OpenWebUI is not configured, use fallback parameter extraction
+            if (!_isConfigured)
+            {
+                return ExtractSlotParametersFallback(message);
+            }
+
+            try
+            {
+                var request = new
+                {
+                    message = message,
+                    history = history.Select(h => new { role = h.IsFromBot ? "assistant" : "user", content = h.Message }).ToArray(),
+                    task = "extract_slot_parameters",
+                    system_prompt = "Extract scheduling parameters from the message. Return JSON with: participants (emails), startDate, endDate, durationMinutes, timeOfDay, specificDay."
+                };
+
+                var content = new StringContent(
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+
+                var response = await _httpClient.PostAsync("extract", content, cts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var parameters = JsonSerializer.Deserialize<SlotParameters>(responseContent, 
+                        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                    
+                    if (parameters != null)
+                    {
+                        return parameters;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error extracting slot parameters from OpenWebUI");
+            }
+
+            return ExtractSlotParametersFallback(message);
+        }
+
+        public async Task<string> FormatAvailableSlotsAsync(List<TimeSlot> slots, SlotParameters parameters)
+        {
+            // If OpenWebUI is not configured, use fallback formatting
+            if (!_isConfigured)
+            {
+                return FormatAvailableSlotsFallback(slots, parameters);
+            }
+
+            try
+            {
+                var request = new
+                {
+                    slots = slots.Select(s => new
+                    {
+                        date = s.StartTime.ToString("dddd, MMMM d"),
+                        day = s.StartTime.ToString("dddd"),
+                        startTime = s.StartTime.ToString("h:mm tt"),
+                        endTime = s.EndTime.ToString("h:mm tt"),
+                        duration = (s.EndTime - s.StartTime).TotalMinutes,
+                        availableParticipants = s.AvailableParticipants.Count,
+                        totalParticipants = s.TotalParticipants,
+                        availabilityScore = s.AvailabilityScore
+                    }).ToList(),
+                    parameters = parameters,
+                    task = "format_available_slots",
+                    system_prompt = "Format the available time slots in a conversational, helpful way. Group by day, include specific times, mention availability. Be enthusiastic but professional."
+                };
+
+                var content = new StringContent(
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+
+                var response = await _httpClient.PostAsync("format", content, cts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+
+                    if (responseObj.TryGetProperty("response", out var responseElement))
+                    {
+                        var result = responseElement.GetString();
+                        if (!string.IsNullOrEmpty(result))
+                        {
+                            return result;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error formatting available slots from OpenWebUI");
+            }
+
+            return FormatAvailableSlotsFallback(slots, parameters);
+        }
+
+        public async Task<string> GenerateClarificationAsync(SlotParameters parameters, List<MessageHistoryItem> history)
+        {
+            // If OpenWebUI is not configured, use fallback clarification
+            if (!_isConfigured)
+            {
+                return GenerateClarificationFallback(parameters);
+            }
+
+            try
+            {
+                var request = new
+                {
+                    parameters = parameters,
+                    history = history.Select(h => new { role = h.IsFromBot ? "assistant" : "user", content = h.Message }).ToArray(),
+                    task = "generate_clarification",
+                    system_prompt = "Ask for missing information needed to find time slots. Be helpful and specific about what's needed."
+                };
+
+                var content = new StringContent(
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+
+                var response = await _httpClient.PostAsync("clarify", content, cts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+
+                    if (responseObj.TryGetProperty("response", out var responseElement))
+                    {
+                        var result = responseElement.GetString();
+                        if (!string.IsNullOrEmpty(result))
+                        {
+                            return result;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating clarification from OpenWebUI");
+            }
+
+            return GenerateClarificationFallback(parameters);
+        }
+
+        public async Task<string> GenerateNoSlotsResponseAsync(SlotParameters parameters, List<MessageHistoryItem> history)
+        {
+            // If OpenWebUI is not configured, use fallback no slots response
+            if (!_isConfigured)
+            {
+                return GenerateNoSlotsFallback(parameters);
+            }
+
+            try
+            {
+                var request = new
+                {
+                    parameters = parameters,
+                    history = history.Select(h => new { role = h.IsFromBot ? "assistant" : "user", content = h.Message }).ToArray(),
+                    task = "generate_no_slots_response",
+                    system_prompt = "Generate a helpful response when no slots are available. Suggest alternatives and offer to help with different criteria."
+                };
+
+                var content = new StringContent(
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+
+                var response = await _httpClient.PostAsync("no-slots", content, cts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+
+                    if (responseObj.TryGetProperty("response", out var responseElement))
+                    {
+                        var result = responseElement.GetString();
+                        if (!string.IsNullOrEmpty(result))
+                        {
+                            return result;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating no slots response from OpenWebUI");
+            }
+
+            return GenerateNoSlotsFallback(parameters);
+        }
+
+        // Fallback methods for when OpenWebUI is not available
+        private IntentResponse RecognizeIntentFallback(string message)
+        {
+            var lowerMessage = message.ToLowerInvariant();
+            
+            if (lowerMessage.Contains("find") && (lowerMessage.Contains("slot") || lowerMessage.Contains("time") || lowerMessage.Contains("available")) ||
+                lowerMessage.Contains("schedule") || lowerMessage.Contains("meeting") || lowerMessage.Contains("interview") ||
+                lowerMessage.Contains("when") && (lowerMessage.Contains("free") || lowerMessage.Contains("available")) ||
+                lowerMessage.Contains("book") || lowerMessage.Contains("reserve"))
+            {
+                return new IntentResponse { TopIntent = "FindSlots", Confidence = 0.8 };
+            }
+            
+            if (lowerMessage.Contains("help") || lowerMessage.Contains("what can you do"))
+            {
+                return new IntentResponse { TopIntent = "Help", Confidence = 0.9 };
+            }
+            
+            if (lowerMessage.Contains("logout") || lowerMessage.Contains("sign out"))
+            {
+                return new IntentResponse { TopIntent = "Logout", Confidence = 0.9 };
+            }
+            
+            return new IntentResponse { TopIntent = "General", Confidence = 0.6 };
+        }
+
+        private SlotParameters ExtractSlotParametersFallback(string message)
+        {
+            var lowerMessage = message.ToLowerInvariant();
+            var parameters = new SlotParameters();
+            
+            // Extract time of day
+            if (lowerMessage.Contains("morning"))
+                parameters.TimeOfDay = "morning";
+            else if (lowerMessage.Contains("afternoon"))
+                parameters.TimeOfDay = "afternoon";
+            else if (lowerMessage.Contains("evening"))
+                parameters.TimeOfDay = "evening";
+            
+            // Extract specific days
+            if (lowerMessage.Contains("monday"))
+                parameters.SpecificDay = "Monday";
+            else if (lowerMessage.Contains("tuesday"))
+                parameters.SpecificDay = "Tuesday";
+            else if (lowerMessage.Contains("wednesday"))
+                parameters.SpecificDay = "Wednesday";
+            else if (lowerMessage.Contains("thursday"))
+                parameters.SpecificDay = "Thursday";
+            else if (lowerMessage.Contains("friday"))
+                parameters.SpecificDay = "Friday";
+            else if (lowerMessage.Contains("tomorrow"))
+                parameters.StartDate = DateTime.Today.AddDays(1);
+            else if (lowerMessage.Contains("next week"))
+                parameters.StartDate = DateTime.Today.AddDays(7);
+            
+            // Extract duration
+            if (lowerMessage.Contains("30 min"))
+                parameters.DurationMinutes = 30;
+            else if (lowerMessage.Contains("90 min") || lowerMessage.Contains("1.5 hour"))
+                parameters.DurationMinutes = 90;
+            else if (lowerMessage.Contains("2 hour"))
+                parameters.DurationMinutes = 120;
+            else
+                parameters.DurationMinutes = 60; // Default
+            
+            // Set default date range if not specified
+            if (!parameters.StartDate.HasValue && string.IsNullOrEmpty(parameters.SpecificDay))
+            {
+                parameters.StartDate = DateTime.Today;
+                parameters.EndDate = DateTime.Today.AddDays(14);
+            }
+            
+            return parameters;
+        }
+
+        private string FormatAvailableSlotsFallback(List<TimeSlot> slots, SlotParameters parameters)
+        {
+            if (!slots.Any())
+            {
+                return "I couldn't find any available slots that match your criteria.";
+            }
+
+            var response = $"✨ Great! I found {slots.Count} available time slot{(slots.Count > 1 ? "s" : "")} for you:\n\n";
+            
+            // Group slots by day
+            var slotsByDay = slots.GroupBy(s => s.StartTime.Date).OrderBy(g => g.Key);
+            
+            foreach (var dayGroup in slotsByDay.Take(3)) // Limit to 3 days
+            {
+                response += $"**{dayGroup.Key:dddd, MMMM d}:**\n";
+                
+                foreach (var slot in dayGroup.Take(3)) // Limit to 3 slots per day
+                {
+                    response += $"• {slot.StartTime:h:mm tt} - {slot.EndTime:h:mm tt}";
+                    if (slot.AvailableParticipants.Any())
+                    {
+                        response += $" ({slot.AvailableParticipants.Count}/{slot.TotalParticipants} participants available)";
+                    }
+                    response += "\n";
+                }
+                
+                response += "\n";
+            }
+
+            if (slots.Count > 9) // If we have more than 3 days × 3 slots
+            {
+                response += $"...and {slots.Count - 9} more available slots.\n\n";
+            }
+
+            response += "Would you like me to help you schedule one of these slots or show you different options?";
+            return response;
+        }
+
+        private string GenerateClarificationFallback(SlotParameters parameters)
+        {
+            var clarificationResponses = new[]
+            {
+                "I'd like to help you find available time slots, but I need a bit more information. Could you tell me:\n\n• When you'd like to schedule the meeting (day/time)\n• How long it should be\n• Who should attend\n\nFor example: 'Find 60-minute slots tomorrow afternoon with John and Sarah'",
+                "To find the best available slots, I'll need some additional details:\n\n• Your preferred time or day\n• Duration of the meeting\n• Participants to include\n\nTry something like 'Schedule a 90-minute interview next Tuesday'",
+                "I want to make sure I find exactly what you need. Please provide:\n\n• Timeframe preference (day/time)\n• Meeting length\n• Attendee list\n\nJust describe it naturally, like 'Book an hour with the team Thursday morning'"
+            };
+            
+            return clarificationResponses[new Random().Next(clarificationResponses.Length)];
+        }
+
+        private string GenerateNoSlotsFallback(SlotParameters parameters)
+        {
+            var timeFrame = parameters.SpecificDay ?? parameters.TimeOfDay ?? "the requested time";
+            var duration = parameters.DurationMinutes?.ToString() ?? "the specified";
+            
+            var noSlotsResponses = new[]
+            {
+                $"I couldn't find any available slots during {timeFrame}. Here are some suggestions:\n\n• Try a different time range\n• Consider fewer participants\n• Look at alternative days\n• Split into multiple shorter meetings\n\nWould you like me to search with different criteria?",
+                $"Unfortunately, no slots are available that meet your requirements for {duration} minutes. You might want to:\n\n• Expand the time window\n• Reduce the participant list\n• Consider scheduling on different days\n• Break into smaller sessions\n\nShall I help you explore other options?",
                 $"No matching slots found for your request. To increase availability, consider:\n\n• Flexible timing (earlier/later in the day)\n• Shorter meeting duration\n• Optional attendees\n• Alternative dates\n\nI'm happy to search again with adjusted parameters!"
             };
             
