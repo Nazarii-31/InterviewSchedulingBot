@@ -55,7 +55,7 @@ namespace InterviewBot.Bot.Dialogs
             try
             {
                 // Create conversation context
-                var conversationContext = new ConversationContext
+                var conversationContext = new InterviewSchedulingBot.Services.Business.ConversationContext
                 {
                     PreviousMessages = new List<string> { query },
                     CurrentIntent = "find_slots",

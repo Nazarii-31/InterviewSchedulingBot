@@ -15,6 +15,7 @@ namespace InterviewSchedulingBot.Services.Integration
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
         private readonly ILogger<OpenWebUIClient> _logger;
+        private readonly bool _isConfigured;
         
         public OpenWebUIClient(
             HttpClient httpClient, 
@@ -28,20 +29,32 @@ namespace InterviewSchedulingBot.Services.Integration
             var baseUrl = _configuration["OpenWebUI:BaseUrl"];
             var apiKey = _configuration["OpenWebUI:ApiKey"];
             
-            if (!string.IsNullOrEmpty(baseUrl))
+            _isConfigured = !string.IsNullOrEmpty(baseUrl) && !string.IsNullOrEmpty(apiKey);
+            
+            if (_isConfigured)
             {
                 _httpClient.BaseAddress = new Uri(baseUrl);
-            }
-            
-            if (!string.IsNullOrEmpty(apiKey))
-            {
                 _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                _logger.LogInformation("OpenWebUI client configured with base URL: {BaseUrl}", baseUrl);
+            }
+            else
+            {
+                _logger.LogInformation("OpenWebUI not configured, using fallback responses");
             }
         }
         
         public async Task<OpenWebUIResponse> ProcessQueryAsync(string query, OpenWebUIRequestType requestType, CancellationToken cancellationToken = default)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            // If OpenWebUI is not configured, return fallback immediately
+            if (!_isConfigured)
+            {
+                _logger.LogDebug("OpenWebUI not configured, returning fallback response for query: {Query}", query);
+                var immediateResponse = CreateFallbackResponse(query, requestType);
+                immediateResponse.ProcessingTime = stopwatch.Elapsed.TotalSeconds;
+                return immediateResponse;
+            }
             
             try
             {
@@ -109,6 +122,13 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<string> GenerateResponseAsync(string prompt, object context, CancellationToken cancellationToken = default)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            
+            // If OpenWebUI is not configured, return fallback immediately
+            if (!_isConfigured)
+            {
+                _logger.LogDebug("OpenWebUI not configured, returning fallback response for prompt");
+                return CreateFallbackTextResponse(context);
+            }
             
             try
             {
@@ -273,6 +293,12 @@ namespace InterviewSchedulingBot.Services.Integration
             var contextStr = context?.ToString() ?? "";
             var contextJson = JsonSerializer.Serialize(context);
             
+            // Check if this is a slot suggestions context
+            if (contextJson.Contains("Slots") || contextJson.Contains("slots") || contextJson.Contains("SlotCount"))
+            {
+                return "✨ I found some great time slots for you! Based on your criteria, I've identified several options that should work well. The slots are ranked by how well they match your preferences and participant availability. Would you like me to help you schedule one of these slots or would you prefer to see different options?";
+            }
+            
             // Check if this is a greeting context
             if (contextJson.Contains("greeting") || contextJson.Contains("hello") || contextJson.Contains("UserName"))
             {
@@ -289,6 +315,12 @@ namespace InterviewSchedulingBot.Services.Integration
             if (contextJson.Contains("error") || contextJson.Contains("Error"))
             {
                 return "I apologize, but I encountered an issue. Please try rephrasing your request or ask me something like 'Find slots tomorrow morning' or 'Schedule an interview next week'.";
+            }
+            
+            // Check if this is a follow-up context
+            if (contextJson.Contains("follow") || contextJson.Contains("Follow"))
+            {
+                return "What would you like me to help you with next? I can help you schedule one of these slots, find different options, or answer any questions you might have about the scheduling process.";
             }
             
             // Default response for other contexts
