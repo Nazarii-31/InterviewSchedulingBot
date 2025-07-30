@@ -69,6 +69,12 @@ builder.Services.AddScoped<ITelemetryService, TelemetryService>();
 builder.Services.AddScoped<IGraphClientFactory, GraphClientFactory>();
 builder.Services.AddScoped<OptimalSlotFinder>();
 
+// Register Natural Language Processing Services
+builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.IOpenWebUIClient, InterviewSchedulingBot.Services.Integration.OpenWebUIClient>();
+builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.SlotQueryParser>();
+builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ConversationalResponseGenerator>();
+builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.IAIResponseService, InterviewSchedulingBot.Services.Business.AIResponseService>();
+
 // Register Bot State Accessors
 builder.Services.AddSingleton<BotStateAccessors>();
 

@@ -3,23 +3,20 @@ using Microsoft.AspNetCore.Mvc;
 namespace InterviewSchedulingBot.Controllers
 {
     /// <summary>
-    /// Controller for serving the UI test interface
+    /// Controller for serving the main chat interface
     /// </summary>
     public class HomeController : ControllerBase
     {
         /// <summary>
-        /// Serve the main UI testing interface
+        /// Redirect to the main chat interface
         /// </summary>
-        /// <returns>HTML page for testing bot functionality</returns>
+        /// <returns>Redirect to chat interface</returns>
         [HttpGet("/")]
         [HttpGet("/ui")]
         [HttpGet("/test")]
         public IActionResult Index()
         {
-            return PhysicalFile(
-                Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "index.html"),
-                "text/html"
-            );
+            return Redirect("/api/chat");
         }
         
         /// <summary>
