@@ -67,101 +67,6 @@ namespace InterviewSchedulingBot.Services.Business
         private readonly IMemoryCache _memoryCache;
         private readonly IConfiguration _configuration;
         private readonly ILogger<AIResponseService> _logger;
-        
-        private static readonly Dictionary<string, string> ResponseTemplates = new()
-        {
-            ["slot_suggestions"] = @"You are an AI assistant helping with interview scheduling. Generate a conversational, friendly response about available time slots.
-
-Context: {context}
-Available slots: {slots}
-Query criteria: {criteria}
-
-Generate a response that:
-- Is conversational and helpful
-- Highlights the best recommendations with reasoning
-- Groups slots by day and time period
-- Explains availability scores and participant counts
-- Includes relevant emojis for visual appeal
-- Ends with a question about next steps
-
-Keep the tone professional but friendly, and make it easy to understand.",
-
-            ["conflict_explanation"] = @"You are an AI assistant explaining scheduling conflicts in a helpful way.
-
-Context: {context}
-Participants: {participants}
-Availability data: {availability}
-Query criteria: {criteria}
-
-Generate a response that:
-- Explains why no suitable slots were found
-- Identifies specific conflict patterns
-- Suggests alternative times or approaches
-- Maintains a helpful, solution-oriented tone
-- Includes actionable next steps
-
-Be empathetic but practical in your suggestions.",
-
-            ["welcome_message"] = @"You are an AI assistant for an interview scheduling bot. Generate a warm, professional welcome message.
-
-User: {userName}
-Context: New conversation start
-
-Create a welcome message that:
-- Greets the user professionally
-- Briefly explains what you can help with
-- Provides 2-3 example commands they can try
-- Sets expectations for natural language interaction
-- Uses a friendly, helpful tone",
-
-            ["error_message"] = @"You are an AI assistant handling an error situation gracefully.
-
-Error type: {errorType}
-Context: {contextInfo}
-
-Generate an error message that:
-- Acknowledges the problem without technical jargon
-- Provides helpful guidance on what to try next
-- Maintains a supportive tone
-- Offers specific alternative actions when possible
-- Keeps the user engaged rather than frustrated",
-
-            ["follow_up_question"] = @"You are an AI assistant generating a natural follow-up question.
-
-Current context: {currentContext}
-Suggested actions: {suggestedActions}
-
-Generate a follow-up question that:
-- Flows naturally from the current conversation
-- Presents options in an easy-to-choose format
-- Uses conversational language
-- Encourages the user to continue the interaction
-- Provides clear guidance on available next steps",
-
-            ["help_message"] = @"You are an AI assistant providing context-aware help.
-
-Current intent: {currentIntent}
-Context: User needs assistance
-
-Generate a help message that:
-- Is tailored to their current situation
-- Provides relevant examples and commands
-- Explains features in an accessible way
-- Includes both specific and general help options
-- Encourages experimentation with natural language",
-
-            ["confirmation_message"] = @"You are an AI assistant generating a confirmation message.
-
-Action type: {actionType}
-Action details: {actionDetails}
-
-Generate a confirmation that:
-- Clearly states what action will be taken
-- Includes relevant details the user should verify
-- Uses a professional but friendly tone
-- Provides an easy way to confirm or modify
-- Builds confidence in the proposed action"
-        };
 
         public AIResponseService(
             IOpenWebUIClient openWebUIClient,
@@ -376,28 +281,63 @@ Generate a confirmation that:
 
         private string BuildPromptForResponseType(string responseType, object context, string userQuery, Dictionary<string, object> additionalData)
         {
-            if (!ResponseTemplates.TryGetValue(responseType, out var template))
-            {
-                template = "Generate a helpful, conversational response for: {context}";
-            }
-
             var contextJson = JsonSerializer.Serialize(context, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
             
-            return template
-                .Replace("{context}", contextJson)
-                .Replace("{userQuery}", userQuery ?? "")
-                .Replace("{slots}", additionalData.ContainsKey("slots") ? JsonSerializer.Serialize(additionalData["slots"]) : "[]")
-                .Replace("{criteria}", additionalData.ContainsKey("criteria") ? JsonSerializer.Serialize(additionalData["criteria"]) : "{}")
-                .Replace("{participants}", additionalData.ContainsKey("participants") ? JsonSerializer.Serialize(additionalData["participants"]) : "[]")
-                .Replace("{availability}", additionalData.ContainsKey("availability") ? JsonSerializer.Serialize(additionalData["availability"]) : "{}")
-                .Replace("{userName}", context?.GetType().GetProperty("UserName")?.GetValue(context)?.ToString() ?? "")
-                .Replace("{errorType}", context?.GetType().GetProperty("ErrorType")?.GetValue(context)?.ToString() ?? "")
-                .Replace("{contextInfo}", context?.GetType().GetProperty("ContextInfo")?.GetValue(context)?.ToString() ?? "")
-                .Replace("{currentContext}", context?.GetType().GetProperty("CurrentContext")?.GetValue(context)?.ToString() ?? "")
-                .Replace("{suggestedActions}", context?.GetType().GetProperty("SuggestedActions")?.GetValue(context)?.ToString() ?? "")
-                .Replace("{currentIntent}", context?.GetType().GetProperty("CurrentIntent")?.GetValue(context)?.ToString() ?? "")
-                .Replace("{actionType}", context?.GetType().GetProperty("ActionType")?.GetValue(context)?.ToString() ?? "")
-                .Replace("{actionDetails}", context?.GetType().GetProperty("ActionDetails")?.GetValue(context)?.ToString() ?? "");
+            // Build dynamic prompt based on response type and context
+            var prompt = responseType switch
+            {
+                "slot_suggestions" => 
+                    $"You are an AI assistant helping with interview scheduling. Generate a conversational response about these available time slots. " +
+                    $"Context: {contextJson}. " +
+                    $"Be helpful, highlight the best recommendations with reasoning, group by day/time, explain scores and participant counts. " +
+                    $"Use a professional but friendly tone and end with a question about next steps.",
+                
+                "conflict_explanation" => 
+                    $"You are an AI assistant explaining scheduling conflicts. " +
+                    $"Context: {contextJson}. " +
+                    $"Explain why no suitable slots were found, identify conflict patterns, suggest alternatives. " +
+                    $"Be empathetic but practical with actionable next steps.",
+                
+                "welcome_message" => 
+                    $"You are an AI assistant for an interview scheduling bot. Generate a warm, professional welcome message. " +
+                    $"Context: {contextJson}. " +
+                    $"Greet professionally, explain what you can help with, provide 2-3 example commands, " +
+                    $"set expectations for natural language interaction.",
+                
+                "error_message" => 
+                    $"You are an AI assistant handling an error gracefully. " +
+                    $"Context: {contextJson}. " +
+                    $"Acknowledge the problem without technical jargon, provide helpful guidance, " +
+                    $"maintain supportive tone, offer specific alternatives, keep user engaged.",
+                
+                "follow_up_question" => 
+                    $"You are an AI assistant generating a natural follow-up question. " +
+                    $"Context: {contextJson}. " +
+                    $"Flow naturally from conversation, present options in easy-to-choose format, " +
+                    $"use conversational language, encourage continued interaction.",
+                
+                "help_message" => 
+                    $"You are an AI assistant providing context-aware help. " +
+                    $"Context: {contextJson}. " +
+                    $"Tailor to their current situation, provide relevant examples, explain features accessibly, " +
+                    $"include specific and general help options, encourage natural language experimentation.",
+                
+                "confirmation_message" => 
+                    $"You are an AI assistant generating a confirmation message. " +
+                    $"Context: {contextJson}. " +
+                    $"Clearly state what action will be taken, include relevant details to verify, " +
+                    $"use professional but friendly tone, provide easy confirmation/modification options.",
+                
+                _ => $"You are a helpful AI assistant for interview scheduling. Generate an appropriate, conversational response for: {contextJson}"
+            };
+
+            // Add user query if available
+            if (!string.IsNullOrEmpty(userQuery))
+            {
+                prompt += $" User query: '{userQuery}'";
+            }
+
+            return prompt;
         }
 
         private string GenerateIntelligentFallback(AIResponseRequest request)
