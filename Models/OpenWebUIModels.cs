@@ -104,21 +104,27 @@ namespace InterviewSchedulingBot.Models
     {
         public bool IsSlotRequest { get; set; }
         public ParameterExtractionData? Parameters { get; set; }
+        public string? Message { get; set; } // For non-slot requests
         public string? SuggestedResponse { get; set; }
     }
 
     public class ParameterExtractionData
     {
         public int Duration { get; set; } = 60; // Default 60 minutes
-        public TimeFrameData TimeFrame { get; set; } = new TimeFrameData();
+        public TimeRangeData TimeRange { get; set; } = new TimeRangeData();
         public List<string> Participants { get; set; } = new List<string>();
     }
 
-    public class TimeFrameData
+    public class TimeRangeData
     {
         public string Type { get; set; } = "specific_day"; // "specific_day", "this_week", "next_week", "date_range"
         public string? StartDate { get; set; } // Format: "2025-07-31"
         public string? EndDate { get; set; } // Format: "2025-07-31"  
         public string? TimeOfDay { get; set; } // "morning", "afternoon", "evening", "all_day", or null
+    }
+
+    // For compatibility with existing code
+    public class TimeFrameData : TimeRangeData
+    {
     }
 }

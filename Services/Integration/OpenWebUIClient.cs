@@ -1666,40 +1666,51 @@ namespace InterviewSchedulingBot.Services.Integration
 
             try
             {
-                var systemPrompt = @"You are a specialized parameter extraction assistant for an Interview Scheduling Bot. Your ONLY job is to analyze user messages and extract scheduling parameters in structured JSON format.
+                var systemPrompt = @"You are a specialized parameter extraction service for an Interview Scheduling Bot. Your ONLY task is to analyze user messages and extract structured scheduling parameters.
 
-When a user asks about finding available times or scheduling meetings, ONLY respond with the JSON structure below. Do NOT provide general scheduling advice or conversation.
-
-Required JSON format:
+ALWAYS respond with ONLY a JSON object in this exact format:
 {
   ""isSlotRequest"": true,
   ""parameters"": {
     ""duration"": 60,
-    ""timeFrame"": {
-      ""type"": ""specific_day"", 
-      ""startDate"": ""2025-07-31"",
-      ""endDate"": ""2025-07-31"",
+    ""timeRange"": {
+      ""type"": ""specific_day"",
+      ""startDate"": ""YYYY-MM-DD"",
+      ""endDate"": ""YYYY-MM-DD"", 
       ""timeOfDay"": ""morning""
     },
-    ""participants"": [""john.doe@example.com"", ""jane.smith@example.com""]
+    ""participants"": [""email@example.com""]
   }
 }
 
-For timeFrame.type, use one of: ""specific_day"", ""this_week"", ""next_week"", ""date_range""
-For timeOfDay, use one of: ""morning"", ""afternoon"", ""evening"", ""all_day"", or null if not specified
-
-For non-slot requests, respond with:
+If the message is not a slot finding request, respond with:
 {
   ""isSlotRequest"": false,
-  ""suggestedResponse"": ""A helpful message the bot can use to respond""
+  ""message"": ""This doesn't appear to be a scheduling request.""
 }
 
-IMPORTANT:
-- ONLY output valid JSON
-- Today's date is " + DateTime.Today.ToString("yyyy-MM-dd") + @"
-- Default duration is 60 minutes if not specified
-- Extract emails or names for participants when available
-- Output NOTHING except the JSON structure";
+Examples:
+1. ""Find me slots for tomorrow morning"" →
+   - isSlotRequest: true
+   - duration: 60 (default)
+   - timeRange.type: ""specific_day""
+   - timeRange.startDate: [tomorrow's date]
+   - timeRange.timeOfDay: ""morning""
+
+2. ""I need a 30-minute slot with john@example.com next Friday"" →
+   - isSlotRequest: true
+   - duration: 30
+   - timeRange.type: ""specific_day""
+   - timeRange.startDate: [next Friday's date]
+   - timeRange.participants: [""john@example.com""]
+
+3. ""Show me availability for 90 minutes this week"" →
+   - isSlotRequest: true
+   - duration: 90
+   - timeRange.type: ""this_week""
+
+Do NOT include explanations or additional text outside the JSON structure. 
+Current date: " + DateTime.Today.ToString("yyyy-MM-dd");
 
                 var request = new
                 {
@@ -1793,36 +1804,36 @@ IMPORTANT:
 
             if (!isSlotRequest)
             {
-                // Generate appropriate suggested response for non-slot requests
-                string suggestedResponse;
+                // Generate appropriate message for non-slot requests
+                string message2;
                 
                 if (lowerMessage.Contains("hello") || lowerMessage.Contains("hi") || lowerMessage.Contains("hey"))
                 {
-                    suggestedResponse = "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots and check calendar availability using natural language. What would you like me to help you with today?";
+                    message2 = "This appears to be a greeting rather than a scheduling request.";
                 }
                 else if (lowerMessage.Contains("help") || lowerMessage.Contains("what can you do"))
                 {
-                    suggestedResponse = "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots using natural language\n• Check calendar availability for multiple participants\n• Analyze scheduling conflicts\n• Suggest optimal meeting times\n\nJust ask me in plain English what you need!";
+                    message2 = "This appears to be a help request rather than a scheduling request.";
                 }
                 else if (lowerMessage.Contains("thank") || lowerMessage.Contains("thanks"))
                 {
-                    suggestedResponse = "You're welcome! I'm here to help with your scheduling needs. Is there anything else you'd like me to assist you with?";
+                    message2 = "This appears to be a thank you message rather than a scheduling request.";
                 }
                 else
                 {
-                    suggestedResponse = "I'm here to help with finding available time slots! You can ask me to check availability, find open times, or analyze schedules using natural language. How can I assist you today?";
+                    message2 = "This doesn't appear to be a scheduling request.";
                 }
 
                 return new ParameterExtractionResponse
                 {
                     IsSlotRequest = false,
-                    SuggestedResponse = suggestedResponse
+                    Message = message2
                 };
             }
 
             // Extract parameters for slot requests
             var parameters = new ParameterExtractionData();
-            var timeFrame = new TimeFrameData();
+            var timeRange = new TimeRangeData();
             
             // Extract duration
             if (lowerMessage.Contains("30 min") || lowerMessage.Contains("thirty min"))
@@ -1838,90 +1849,90 @@ IMPORTANT:
             
             // Extract time of day
             if (lowerMessage.Contains("morning"))
-                timeFrame.TimeOfDay = "morning";
+                timeRange.TimeOfDay = "morning";
             else if (lowerMessage.Contains("afternoon"))
-                timeFrame.TimeOfDay = "afternoon";
+                timeRange.TimeOfDay = "afternoon";
             else if (lowerMessage.Contains("evening"))
-                timeFrame.TimeOfDay = "evening";
+                timeRange.TimeOfDay = "evening";
             else if (lowerMessage.Contains("all day") || lowerMessage.Contains("any time"))
-                timeFrame.TimeOfDay = "all_day";
+                timeRange.TimeOfDay = "all_day";
             
             // Extract time frame type and dates
             var today = DateTime.Today;
             
             if (lowerMessage.Contains("tomorrow"))
             {
-                timeFrame.Type = "specific_day";
+                timeRange.Type = "specific_day";
                 var tomorrow = today.AddDays(1);
-                timeFrame.StartDate = tomorrow.ToString("yyyy-MM-dd");
-                timeFrame.EndDate = tomorrow.ToString("yyyy-MM-dd");
+                timeRange.StartDate = tomorrow.ToString("yyyy-MM-dd");
+                timeRange.EndDate = tomorrow.ToString("yyyy-MM-dd");
             }
             else if (lowerMessage.Contains("this week"))
             {
-                timeFrame.Type = "this_week";
+                timeRange.Type = "this_week";
                 // Start from today, end on Sunday of this week
                 var daysUntilSunday = 7 - (int)today.DayOfWeek;
-                timeFrame.StartDate = today.ToString("yyyy-MM-dd");
-                timeFrame.EndDate = today.AddDays(daysUntilSunday).ToString("yyyy-MM-dd");
+                timeRange.StartDate = today.ToString("yyyy-MM-dd");
+                timeRange.EndDate = today.AddDays(daysUntilSunday).ToString("yyyy-MM-dd");
             }
             else if (lowerMessage.Contains("next week"))
             {
-                timeFrame.Type = "next_week";
+                timeRange.Type = "next_week";
                 // Start from next Monday, end on next Sunday
                 var daysUntilNextMonday = 7 - (int)today.DayOfWeek + 1;
                 if (today.DayOfWeek == DayOfWeek.Sunday) daysUntilNextMonday = 1;
                 
                 var nextMonday = today.AddDays(daysUntilNextMonday);
-                timeFrame.StartDate = nextMonday.ToString("yyyy-MM-dd");
-                timeFrame.EndDate = nextMonday.AddDays(6).ToString("yyyy-MM-dd");
+                timeRange.StartDate = nextMonday.ToString("yyyy-MM-dd");
+                timeRange.EndDate = nextMonday.AddDays(6).ToString("yyyy-MM-dd");
             }
             else if (lowerMessage.Contains("monday"))
             {
-                timeFrame.Type = "specific_day";
+                timeRange.Type = "specific_day";
                 var nextMonday = GetNextWeekday(today, DayOfWeek.Monday);
-                timeFrame.StartDate = nextMonday.ToString("yyyy-MM-dd");
-                timeFrame.EndDate = nextMonday.ToString("yyyy-MM-dd");
+                timeRange.StartDate = nextMonday.ToString("yyyy-MM-dd");
+                timeRange.EndDate = nextMonday.ToString("yyyy-MM-dd");
             }
             else if (lowerMessage.Contains("tuesday"))
             {
-                timeFrame.Type = "specific_day";
+                timeRange.Type = "specific_day";
                 var nextTuesday = GetNextWeekday(today, DayOfWeek.Tuesday);
-                timeFrame.StartDate = nextTuesday.ToString("yyyy-MM-dd");
-                timeFrame.EndDate = nextTuesday.ToString("yyyy-MM-dd");
+                timeRange.StartDate = nextTuesday.ToString("yyyy-MM-dd");
+                timeRange.EndDate = nextTuesday.ToString("yyyy-MM-dd");
             }
             else if (lowerMessage.Contains("wednesday"))
             {
-                timeFrame.Type = "specific_day";
+                timeRange.Type = "specific_day";
                 var nextWednesday = GetNextWeekday(today, DayOfWeek.Wednesday);
-                timeFrame.StartDate = nextWednesday.ToString("yyyy-MM-dd");
-                timeFrame.EndDate = nextWednesday.ToString("yyyy-MM-dd");
+                timeRange.StartDate = nextWednesday.ToString("yyyy-MM-dd");
+                timeRange.EndDate = nextWednesday.ToString("yyyy-MM-dd");
             }
             else if (lowerMessage.Contains("thursday"))
             {
-                timeFrame.Type = "specific_day";
+                timeRange.Type = "specific_day";
                 var nextThursday = GetNextWeekday(today, DayOfWeek.Thursday);
-                timeFrame.StartDate = nextThursday.ToString("yyyy-MM-dd");
-                timeFrame.EndDate = nextThursday.ToString("yyyy-MM-dd");
+                timeRange.StartDate = nextThursday.ToString("yyyy-MM-dd");
+                timeRange.EndDate = nextThursday.ToString("yyyy-MM-dd");
             }
             else if (lowerMessage.Contains("friday"))
             {
-                timeFrame.Type = "specific_day";
+                timeRange.Type = "specific_day";
                 var nextFriday = GetNextWeekday(today, DayOfWeek.Friday);
-                timeFrame.StartDate = nextFriday.ToString("yyyy-MM-dd");
-                timeFrame.EndDate = nextFriday.ToString("yyyy-MM-dd");
+                timeRange.StartDate = nextFriday.ToString("yyyy-MM-dd");
+                timeRange.EndDate = nextFriday.ToString("yyyy-MM-dd");
             }
             else
             {
                 // Default to specific day (today or next business day)
-                timeFrame.Type = "specific_day";
+                timeRange.Type = "specific_day";
                 var targetDate = today.DayOfWeek == DayOfWeek.Saturday || today.DayOfWeek == DayOfWeek.Sunday 
                     ? GetNextWeekday(today, DayOfWeek.Monday)
                     : today;
-                timeFrame.StartDate = targetDate.ToString("yyyy-MM-dd");
-                timeFrame.EndDate = targetDate.ToString("yyyy-MM-dd");
+                timeRange.StartDate = targetDate.ToString("yyyy-MM-dd");
+                timeRange.EndDate = targetDate.ToString("yyyy-MM-dd");
             }
             
-            parameters.TimeFrame = timeFrame;
+            parameters.TimeRange = timeRange;
             
             // Extract participants (look for email addresses or names with @)
             var participants = new List<string>();

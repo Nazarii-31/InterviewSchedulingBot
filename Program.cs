@@ -84,6 +84,9 @@ builder.Services.AddSingleton<InterviewSchedulingBot.Services.ConversationStateM
 // Register Bot State Accessors
 builder.Services.AddSingleton<BotStateAccessors>();
 
+// Register Mock Calendar Generator
+builder.Services.AddSingleton<InterviewSchedulingBot.Services.MockCalendarGenerator>();
+
 // === EXISTING SERVICES ===
 
 // Add services to the container.
