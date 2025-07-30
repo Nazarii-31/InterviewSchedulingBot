@@ -87,6 +87,10 @@ builder.Services.AddSingleton<BotStateAccessors>();
 // Register Mock Calendar Generator
 builder.Services.AddSingleton<InterviewSchedulingBot.Services.MockCalendarGenerator>();
 
+// Register Clean Services
+builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ISimpleOpenWebUIParameterExtractor, InterviewSchedulingBot.Services.Integration.SimpleOpenWebUIParameterExtractor>();
+builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ICleanMockDataGenerator, InterviewSchedulingBot.Services.Business.CleanMockDataGenerator>();
+
 // === EXISTING SERVICES ===
 
 // Add services to the container.
