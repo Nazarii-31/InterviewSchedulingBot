@@ -584,22 +584,22 @@ namespace InterviewSchedulingBot.Services.Integration
             // Analyze message content for better contextual responses
             if (lowerMessage.Contains("hello") || lowerMessage.Contains("hi") || lowerMessage.Contains("hey"))
             {
-                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots, schedule meetings, and manage your calendar using natural language. What would you like me to help you with today?";
+                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots and check calendar availability using natural language. What would you like me to help you with today?";
             }
 
             if (lowerMessage.Contains("help") || lowerMessage.Contains("what can you do"))
             {
-                return "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots using natural language\n• Schedule interviews and meetings\n• Check calendar availability\n• Answer questions about scheduling\n\nJust ask me in plain English what you need!";
+                return "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots using natural language\n• Check calendar availability for multiple participants\n• Analyze scheduling conflicts\n• Suggest optimal meeting times\n\nJust ask me in plain English what you need!";
             }
 
             if (lowerMessage.Contains("slots") || lowerMessage.Contains("available") || lowerMessage.Contains("time") || lowerMessage.Contains("schedule"))
             {
-                return "I'd be happy to help you find available time slots! Could you please tell me more details like:\n\n• When would you like to schedule the meeting?\n• How long should the meeting be?\n• Who should be included?\n\nFor example, you could say 'Find slots tomorrow morning' or 'Schedule a 1-hour meeting next week'.";
+                return "I'd be happy to help you find available time slots! Could you please tell me more details like:\n\n• When would you like to check availability?\n• How long should the meeting be?\n• Who should be included?\n\nFor example, you could say 'Find slots tomorrow morning' or 'Check availability for a 1-hour meeting next week'.";
             }
 
             if (lowerMessage.Contains("thank") || lowerMessage.Contains("thanks"))
             {
-                return "You're welcome! I'm here to help with your scheduling needs. Is there anything else you'd like me to assist you with?";
+                return "You're welcome! I'm here to help with finding availability and checking schedules. Is there anything else you'd like me to assist you with?";
             }
 
             // Check conversation context for better responses
@@ -608,12 +608,12 @@ namespace InterviewSchedulingBot.Services.Integration
                 var recentBotMessage = history.LastOrDefault(h => h.IsFromBot)?.Message ?? "";
                 if (recentBotMessage.Contains("slots") || recentBotMessage.Contains("available"))
                 {
-                    return "I understand you're interested in scheduling. Could you provide more specific details about when you'd like to meet, the duration, and who should be included? This will help me find the best available slots for you.";
+                    return "I understand you're interested in checking availability. Could you provide more specific details about when you'd like to meet, the duration, and who should be included? This will help me find the best available slots for you.";
                 }
             }
 
             // Default conversational response
-            return "I'm here to help with interview scheduling! You can ask me to find time slots, schedule meetings, or check availability using natural language. For example, try asking 'Find slots tomorrow afternoon' or 'When can we schedule a meeting next week?' How can I assist you today?";
+            return "I'm here to help with finding available time slots! You can ask me to check availability, find open times, or analyze schedules using natural language. For example, try asking 'Find slots tomorrow afternoon' or 'When are we available for a meeting next week?' How can I assist you today?";
         }
 
         private string GenerateSlotSuggestionsFallback(List<TimeSlot> availableSlots, List<string> participants, Dictionary<string, List<ConflictDetail>> conflicts)
@@ -645,7 +645,7 @@ namespace InterviewSchedulingBot.Services.Integration
                 }
             }
 
-            response += "\nWould you like me to help you schedule one of these slots or show you different options?";
+            response += "\nWould you like me to help you check other time options or show you different availability?";
             return response;
         }
 
@@ -754,35 +754,35 @@ namespace InterviewSchedulingBot.Services.Integration
             // Check if this is a slot suggestions context
             if (contextJson.Contains("Slots") || contextJson.Contains("slots") || contextJson.Contains("SlotCount"))
             {
-                return "✨ I found some great time slots for you! Based on your criteria, I've identified several options that should work well. The slots are ranked by how well they match your preferences and participant availability. Would you like me to help you schedule one of these slots or would you prefer to see different options?";
+                return "✨ I found some great time slots for you! Based on your criteria, I've identified several options that should work well. The slots are ranked by how well they match your preferences and participant availability. Would you like me to help you check other time options or explore different availability?";
             }
             
             // Check if this is a greeting context
             if (contextJson.Contains("greeting") || contextJson.Contains("hello") || contextJson.Contains("UserName"))
             {
-                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots, schedule meetings, and manage your calendar using natural language. What would you like me to help you with today?";
+                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots and check calendar availability using natural language. What would you like me to help you with today?";
             }
             
             // Check if this is a help context
             if (contextJson.Contains("help") || contextJson.Contains("Help"))
             {
-                return "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots using natural language\n• Schedule interviews and meetings\n• Check calendar availability\n• Answer questions about scheduling\n\nJust ask me in plain English what you need!";
+                return "I can help you with finding available time slots! Here's what I can do:\n\n• Find available time slots using natural language\n• Check calendar availability for multiple participants\n• Analyze scheduling conflicts\n• Suggest optimal meeting times\n\nJust ask me in plain English what you need!";
             }
             
             // Check if this is an error context
             if (contextJson.Contains("error") || contextJson.Contains("Error"))
             {
-                return "I apologize, but I encountered an issue. Please try rephrasing your request or ask me something like 'Find slots tomorrow morning' or 'Schedule an interview next week'.";
+                return "I apologize, but I encountered an issue. Please try rephrasing your request or ask me something like 'Find slots tomorrow morning' or 'Check availability next week'.";
             }
             
             // Check if this is a follow-up context
             if (contextJson.Contains("follow") || contextJson.Contains("Follow"))
             {
-                return "What would you like me to help you with next? I can help you schedule one of these slots, find different options, or answer any questions you might have about the scheduling process.";
+                return "What would you like me to help you with next? I can help you find different time options, check other availability, or answer any questions you might have about the scheduling process.";
             }
             
             // Default response for other contexts
-            return "I'm here to help you with interview scheduling! You can ask me to find time slots, schedule meetings, or check availability using natural language. How can I assist you today?";
+            return "I'm here to help you find available time slots! You can ask me to check availability, find open times, or analyze schedules using natural language. How can I assist you today?";
         }
 
         private string GetSystemPrompt(string conversationType)
@@ -846,7 +846,7 @@ namespace InterviewSchedulingBot.Services.Integration
                 response += "\n";
             }
 
-            response += "Would you like me to help you schedule one of these slots or show you different options?";
+            response += "Would you like me to check other time options or show you different availability?";
             return response;
         }
 
@@ -860,10 +860,10 @@ namespace InterviewSchedulingBot.Services.Integration
             {
                 var greetings = new[]
                 {
-                    "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots, schedule meetings, and manage your calendar using natural language. What would you like me to help you with today?",
-                    "Hi there! Welcome to the Interview Scheduling Bot. I specialize in finding time slots, coordinating meetings, and managing calendar availability. How can I assist you?",
-                    "Hey! Great to see you. I'm here to make interview scheduling easier for you. Just tell me what you need - find slots, check availability, or schedule meetings. What's on your agenda?",
-                    "Hello! I'm your scheduling assistant, ready to help with all your interview coordination needs. Whether you need to find time slots or book meetings, I've got you covered. What can I do for you?"
+                    "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots and check calendar availability using natural language. What would you like me to help you with today?",
+                    "Hi there! Welcome to the Interview Scheduling Bot. I specialize in finding time slots and checking calendar availability. How can I assist you?",
+                    "Hey! Great to see you. I'm here to make finding available time slots easier for you. Just tell me what you need - find slots, check availability, or analyze schedules. What's on your agenda?",
+                    "Hello! I'm your scheduling assistant, ready to help with finding available time slots and checking calendar availability. What can I do for you?"
                 };
                 return greetings[new Random().Next(greetings.Length)];
             }
@@ -873,9 +873,9 @@ namespace InterviewSchedulingBot.Services.Integration
             {
                 var helpResponses = new[]
                 {
-                    "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots using natural language\n• Schedule interviews and meetings\n• Check calendar availability\n• Answer questions about scheduling\n\nJust ask me in plain English what you need!",
-                    "I'm your scheduling specialist! My capabilities include:\n\n• Intelligent time slot discovery\n• Meeting coordination and booking\n• Calendar conflict resolution\n• Natural language understanding\n\nTry asking something like 'Find slots tomorrow morning' or 'Schedule a meeting next week'.",
-                    "Here's how I can assist with your scheduling needs:\n\n• Smart availability search\n• Interview and meeting booking\n• Participant coordination\n• Flexible scheduling options\n\nSimply describe what you need in everyday language, and I'll take care of the rest!"
+                    "I can help you find available time slots! Here's what I can do:\n\n• Find available time slots using natural language\n• Check calendar availability for multiple participants\n• Analyze scheduling conflicts\n• Suggest optimal meeting times\n\nJust ask me in plain English what you need!",
+                    "I'm your availability specialist! My capabilities include:\n\n• Intelligent time slot discovery\n• Calendar availability checking\n• Conflict analysis and resolution\n• Natural language understanding\n\nTry asking something like 'Find slots tomorrow morning' or 'Check availability next week'.",
+                    "Here's how I can assist with finding availability:\n\n• Smart time slot search\n• Multi-participant availability checking\n• Schedule conflict analysis\n• Flexible time options\n\nSimply describe what you need in everyday language, and I'll help you find the best available times!"
                 };
                 return helpResponses[new Random().Next(helpResponses.Length)];
             }
@@ -885,9 +885,9 @@ namespace InterviewSchedulingBot.Services.Integration
             {
                 var schedulingResponses = new[]
                 {
-                    "I'd be happy to help you find available time slots! Could you please tell me more details like:\n\n• When would you like to schedule the meeting?\n• How long should the meeting be?\n• Who should be included?\n\nFor example, you could say 'Find slots tomorrow morning' or 'Schedule a 1-hour meeting next week'.",
-                    "Perfect! I can help you find the ideal time slots. To get started, I'll need a few details:\n\n• Your preferred timeframe\n• Meeting duration\n• Participants to include\n\nTry something like 'Find 90-minute slots Thursday afternoon' or 'Schedule with John and Mary next week'.",
-                    "Excellent! Let me help you discover available scheduling options. Please share:\n\n• When you'd like to meet\n• How long the session should be\n• Who needs to attend\n\nJust describe it naturally - 'Book an hour slot tomorrow' or 'Find time for 3 people Friday'."
+                    "I'd be happy to help you find available time slots! Could you please tell me more details like:\n\n• When would you like to check availability?\n• How long should the meeting be?\n• Who should be included?\n\nFor example, you could say 'Find slots tomorrow morning' or 'Check availability for a 1-hour meeting next week'.",
+                    "Perfect! I can help you find the ideal time slots. To get started, I'll need a few details:\n\n• Your preferred timeframe\n• Meeting duration\n• Participants to include\n\nTry something like 'Find 90-minute slots Thursday afternoon' or 'Check availability with John and Mary next week'.",
+                    "Excellent! Let me help you discover available time options. Please share:\n\n• When you'd like to meet\n• How long the session should be\n• Who needs to attend\n\nJust describe it naturally - 'Find an hour slot tomorrow' or 'Check availability for 3 people Friday'."
                 };
                 return schedulingResponses[new Random().Next(schedulingResponses.Length)];
             }
@@ -1316,7 +1316,7 @@ namespace InterviewSchedulingBot.Services.Integration
                 response += $"...and {slots.Count - 9} more available slots.\n\n";
             }
 
-            response += "Would you like me to help you schedule one of these slots or show you different options?";
+            response += "Would you like me to check other time options or show you different availability?";
             return response;
         }
 

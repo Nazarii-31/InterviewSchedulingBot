@@ -483,11 +483,13 @@ namespace InterviewBot.Bot
             var helpMessage = "I can help you find available time slots for interviews and meetings! Here's what I can do:\n\n" +
                              "• Find available time slots using natural language\n" +
                              "• Check calendar availability for multiple participants\n" +
-                             "• Suggest optimal meeting times\n\n" +
+                             "• Suggest optimal meeting times\n" +
+                             "• Analyze scheduling conflicts and suggest alternatives\n\n" +
                              "Just ask me in plain English, like:\n" +
                              "• 'Find slots tomorrow morning'\n" +
-                             "• 'When can we meet for 90 minutes next week?'\n" +
-                             "• 'Show me availability for John and Sarah on Friday'";
+                             "• 'When are we available for 90 minutes next week?'\n" +
+                             "• 'Show me availability for John and Sarah on Friday'\n" +
+                             "• 'Check if we can meet Tuesday afternoon'";
             
             await turnContext.SendActivityAsync(MessageFactory.Text(helpMessage), cancellationToken);
         }
