@@ -272,8 +272,9 @@ namespace InterviewSchedulingBot.Controllers
         }
 
         .message-avatar {
-            width: 32px;
-            height: 32px;
+            width: 36px;
+            height: 36px;
+            min-width: 36px;
             border-radius: 50%;
             margin: 0 8px;
             display: flex;
@@ -289,15 +290,16 @@ namespace InterviewSchedulingBot.Controllers
         }
 
         .message.bot .message-avatar {
-            background-color: #464775;
+            background-color: #6264f3;
         }
 
         .message-content {
-            max-width: 70%;
+            max-width: 80%;
             padding: 12px 16px;
-            border-radius: 8px;
+            border-radius: 18px;
             position: relative;
             word-wrap: break-word;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
         }
 
         .message.user .message-content {
@@ -307,21 +309,34 @@ namespace InterviewSchedulingBot.Controllers
         }
 
         .message.bot .message-content {
-            background-color: white;
+            background-color: #f0f2ff;
             color: #323130;
-            border: 1px solid #e1dfdd;
             border-bottom-left-radius: 4px;
         }
 
         .message-text {
-            line-height: 1.4;
+            line-height: 1.5;
             white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 0.95rem;
         }
 
         .message-timestamp {
-            font-size: 11px;
-            opacity: 0.7;
-            margin-top: 4px;
+            font-size: 0.75rem;
+            color: #aaa;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .card-attachment {
+            margin-top: 8px;
+        }
+
+        .adaptive-card {
+            background-color: white;
+            border: 1px solid #e1dfdd;
+            border-radius: 8px;
+            padding: 12px;
         }
 
         .input-container {
@@ -715,11 +730,13 @@ namespace InterviewSchedulingBot.Controllers
                     const data = await response.json();
                     conversationId = data.conversationId;
                     
-                    // Clear existing messages and show full history
-                    clearMessages();
-                    data.messages.forEach(msg => {
-                        addMessage(msg.text, msg.from, msg.isBot, msg.attachments);
-                    });
+                    // Only add the bot response (skip user message since it's already added)
+                    const botMessages = data.messages.filter(msg => msg.isBot);
+                    const lastBotMessage = botMessages[botMessages.length - 1];
+                    
+                    if (lastBotMessage && lastBotMessage.text && lastBotMessage.text.trim() !== '') {
+                        addMessage(lastBotMessage.text, lastBotMessage.from, lastBotMessage.isBot, lastBotMessage.attachments);
+                    }
                     
                     showStatus('Connected', 'connected');
                 } else {
@@ -738,19 +755,25 @@ namespace InterviewSchedulingBot.Controllers
 
         function addMessage(text, from, isBot, attachments = []) {
             const messagesContainer = document.getElementById('messagesContainer');
+            
+            // Don't add empty messages
+            if (!text || text.trim() === '') {
+                return;
+            }
+            
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isBot ? 'bot' : 'user'}`;
 
             const avatarDiv = document.createElement('div');
             avatarDiv.className = 'message-avatar';
-            avatarDiv.textContent = isBot ? '🤖' : 'U';
+            avatarDiv.textContent = isBot ? 'B' : 'U';
 
             const contentDiv = document.createElement('div');
             contentDiv.className = 'message-content';
 
             const textDiv = document.createElement('div');
             textDiv.className = 'message-text';
-            textDiv.textContent = text || '';
+            textDiv.textContent = text;
 
             const timestampDiv = document.createElement('div');
             timestampDiv.className = 'message-timestamp';
@@ -758,6 +781,18 @@ namespace InterviewSchedulingBot.Controllers
 
             contentDiv.appendChild(textDiv);
             contentDiv.appendChild(timestampDiv);
+
+            // Handle attachments if present
+            if (attachments && attachments.length > 0) {
+                attachments.forEach(attachment => {
+                    if (attachment.contentType === 'application/vnd.microsoft.card.adaptive') {
+                        const cardDiv = document.createElement('div');
+                        cardDiv.className = 'card-attachment';
+                        cardDiv.innerHTML = '<div class=""adaptive-card"">' + formatAdaptiveCard(attachment.content) + '</div>';
+                        contentDiv.appendChild(cardDiv);
+                    }
+                });
+            }
 
             messageDiv.appendChild(avatarDiv);
             messageDiv.appendChild(contentDiv);
@@ -970,6 +1005,29 @@ namespace InterviewSchedulingBot.Controllers
             link.click();
             URL.revokeObjectURL(url);
             showStatus('Mock data exported', 'connected');
+        }
+
+        function formatAdaptiveCard(content) {
+            // Simple adaptive card formatting for display
+            if (typeof content === 'object') {
+                return `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+            }
+            return content.toString();
+        }
+
+        function formatMarkdown(text) {
+            // Simple markdown formatting
+            return text
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                .replace(/`(.*?)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+
+        function formatTime(timestamp) {
+            if (!timestamp) return new Date().toLocaleTimeString();
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString();
         }
     </script>
 </body>

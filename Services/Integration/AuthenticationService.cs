@@ -121,6 +121,12 @@ namespace InterviewSchedulingBot.Services
 
         public async Task<bool> IsUserAuthenticatedAsync(string userId)
         {
+            // If authentication is not configured (test environment), allow access
+            if (!_isConfigured)
+            {
+                return true;
+            }
+            
             var token = await GetAccessTokenAsync(userId);
             return !string.IsNullOrEmpty(token);
         }
