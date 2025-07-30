@@ -26,8 +26,7 @@ namespace InterviewBot.Bot
         private readonly BotStateAccessors _accessors;
         private readonly DialogSet _dialogs;
         private readonly ILogger<InterviewSchedulingBotEnhanced> _logger;
-        private readonly SlotQueryParser _slotQueryParser;
-        private readonly ConversationalResponseGenerator _responseGenerator;
+        private readonly IAIResponseService _aiResponseService;
         private readonly InterviewBot.Domain.Interfaces.ISchedulingService _schedulingService;
 
         public InterviewSchedulingBotEnhanced(
@@ -41,8 +40,7 @@ namespace InterviewBot.Bot
             BotStateAccessors accessors,
             ILogger<InterviewSchedulingBotEnhanced> logger,
             ILoggerFactory loggerFactory,
-            SlotQueryParser slotQueryParser,
-            ConversationalResponseGenerator responseGenerator,
+            IAIResponseService aiResponseService,
             InterviewBot.Domain.Interfaces.ISchedulingService schedulingService)
         {
             _authService = authService;
@@ -54,15 +52,14 @@ namespace InterviewBot.Bot
             _userState = userState;
             _accessors = accessors;
             _logger = logger;
-            _slotQueryParser = slotQueryParser;
-            _responseGenerator = responseGenerator;
+            _aiResponseService = aiResponseService;
             _schedulingService = schedulingService;
             
             // Setup dialogs with specific loggers
             _dialogs = new DialogSet(_accessors.DialogStateAccessor);
             _dialogs.Add(new ScheduleInterviewDialog(_accessors, _mediator, loggerFactory.CreateLogger<ScheduleInterviewDialog>()));
             _dialogs.Add(new ViewInterviewsDialog(_accessors, _mediator, loggerFactory.CreateLogger<ViewInterviewsDialog>()));
-            _dialogs.Add(new FindSlotsDialog(_slotQueryParser, _schedulingService, _responseGenerator, _accessors, loggerFactory.CreateLogger<FindSlotsDialog>()));
+            _dialogs.Add(new FindSlotsDialog(_aiResponseService, _schedulingService, _accessors, loggerFactory.CreateLogger<FindSlotsDialog>()));
         }
 
         protected override async Task OnMembersAddedAsync(
@@ -70,28 +67,16 @@ namespace InterviewBot.Bot
             ITurnContext<IConversationUpdateActivity> turnContext,
             CancellationToken cancellationToken)
         {
-            var welcomeText = "🤖 **Welcome to the Interview Scheduling Bot!**\n\n" +
-                "I can help you efficiently schedule interviews using our advanced Clean Architecture system:\n\n" +
-                "✅ **Smart Scheduling** - Find optimal times for all participants\n" +
-                "✅ **Calendar Integration** - Automatic calendar invites and Teams meetings\n" +
-                "✅ **Conflict Detection** - Avoid scheduling conflicts\n" +
-                "✅ **Multi-participant Support** - Handle complex scheduling scenarios\n\n" +
-                "**What I can help you with:**\n" +
-                "🗓️ **Schedule Interview** - Find and book optimal interview times\n" +
-                "📅 **View Interviews** - See your upcoming interviews\n" +
-                "❌ **Cancel Interviews** - Cancel or reschedule meetings\n" +
-                "🔍 **Find Availability** - Check participant availability\n\n" +
-                "**Quick Commands:**\n" +
-                "• Type **'schedule'** or **'book'** to schedule a new interview\n" +
-                "• Type **'view'** or **'list'** to see your interviews\n" +
-                "• Type **'help'** for more options\n\n" +
-                "Let's get started! What would you like to do?";
-
             foreach (var member in membersAdded)
             {
                 if (member.Id != turnContext.Activity.Recipient.Id)
                 {
-                    await turnContext.SendActivityAsync(MessageFactory.Text(welcomeText), cancellationToken);
+                    // Generate AI-driven welcome message
+                    var welcomeMessage = await _aiResponseService.GenerateWelcomeMessageAsync(
+                        member.Name ?? "there", 
+                        cancellationToken);
+                    
+                    await turnContext.SendActivityAsync(MessageFactory.Text(welcomeMessage), cancellationToken);
                     
                     // Initialize user profile
                     var userProfile = await _accessors.UserProfileAccessor.GetAsync(
@@ -448,57 +433,32 @@ namespace InterviewBot.Bot
         
         private async Task ShowGreetingMessageAsync(ITurnContext turnContext, CancellationToken cancellationToken)
         {
-            var greetingMessage = "👋 Hello! I'm your Interview Scheduling Assistant.\n\n" +
-                                "I can help you:\n" +
-                "🗓️ **Schedule interviews** with optimal time finding\n" +
-                "📅 **View your upcoming interviews**\n" +
-                "❌ **Manage your interview calendar**\n\n" +
-                "What would you like to do today?";
+            var greetingMessage = await _aiResponseService.GenerateResponseAsync(
+                new AIResponseRequest
+                {
+                    ResponseType = "greeting_message",
+                    Context = new { UserName = turnContext.Activity.From.Name ?? "there" }
+                },
+                cancellationToken);
             
             await turnContext.SendActivityAsync(MessageFactory.Text(greetingMessage), cancellationToken);
         }
         
         private async Task ShowHelpMessageAsync(ITurnContext turnContext, CancellationToken cancellationToken)
         {
-            var helpMessage = "🆘 **Help - Interview Scheduling Bot**\n\n" +
-                            "**Available Commands:**\n\n" +
-                            "📝 **Schedule Interview**\n" +
-                            "   • Type: `schedule`, `book`, `create interview`\n" +
-                            "   • I'll guide you through scheduling a new interview\n\n" +
-                            "📅 **View Interviews**\n" +
-                            "   • Type: `view`, `list`, `my interviews`\n" +
-                            "   • See your upcoming scheduled interviews\n\n" +
-                            "🔍 **Find Available Slots** *(NEW!)*\n" +
-                            "   • Use natural language like:\n" +
-                            "   • \"Find slots on Thursday afternoon\"\n" +
-                            "   • \"Are there any slots next Monday?\"\n" +
-                            "   • \"Show me morning availability tomorrow\"\n" +
-                            "   • \"Find a 30-minute slot this week\"\n\n" +
-                            "❌ **Cancel Interview** *(Coming Soon)*\n" +
-                            "   • Type: `cancel`, `remove`\n" +
-                            "   • Cancel or reschedule existing interviews\n\n" +
-                            "**🤖 Natural Language Features:**\n" +
-                            "• I understand conversational queries about time and availability\n" +
-                            "• I can explain scheduling conflicts and suggest alternatives\n" +
-                            "• I provide detailed availability information in human-readable format\n\n" +
-                            "**Tips:**\n" +
-                            "• I understand natural language - just tell me what you want to do!\n" +
-                            "• I can handle multiple participants and complex scheduling\n" +
-                            "• All meetings include automatic Teams links\n" +
-                            "• Calendar invites are sent automatically\n\n" +
-                            "Ready to get started? Just type what you'd like to do!";
+            var helpMessage = await _aiResponseService.GenerateHelpMessageAsync(
+                "general_help", 
+                cancellationToken);
             
             await turnContext.SendActivityAsync(MessageFactory.Text(helpMessage), cancellationToken);
         }
         
         private async Task ShowUnknownIntentMessageAsync(ITurnContext turnContext, CancellationToken cancellationToken)
         {
-            var unknownMessage = "🤔 I'm not sure what you'd like to do.\n\n" +
-                               "**I can help you with:**\n" +
-                               "🗓️ **Schedule an interview** - type `schedule` or `book`\n" +
-                               "📅 **View your interviews** - type `view` or `list`\n" +
-                               "🆘 **Get help** - type `help`\n\n" +
-                               "Or just describe what you want to do in your own words!";
+            var unknownMessage = await _aiResponseService.GenerateErrorMessageAsync(
+                "unknown_intent", 
+                "User message unclear", 
+                cancellationToken);
             
             await turnContext.SendActivityAsync(MessageFactory.Text(unknownMessage), cancellationToken);
         }
