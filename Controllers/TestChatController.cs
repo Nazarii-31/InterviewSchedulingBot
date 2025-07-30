@@ -761,6 +761,19 @@ namespace InterviewSchedulingBot.Controllers
                 return;
             }
             
+            // Check if this exact message is already in the chat
+            const existingMessages = document.querySelectorAll('.message');
+            for (const existingMessage of existingMessages) {
+                const existingText = existingMessage.querySelector('.message-text')?.textContent;
+                const existingIsBot = existingMessage.classList.contains('bot');
+                
+                // If same text and from same source, it's a duplicate - don't add it
+                if (existingText === text && existingIsBot === isBot) {
+                    console.log('Prevented duplicate message:', text);
+                    return;
+                }
+            }
+            
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${isBot ? 'bot' : 'user'}`;
 

@@ -78,6 +78,9 @@ builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.IAIResponseS
 // Register Conversation Store
 builder.Services.AddSingleton<InterviewSchedulingBot.Interfaces.IConversationStore, InterviewSchedulingBot.Services.InMemoryConversationStore>();
 
+// Register ConversationStateManager
+builder.Services.AddSingleton<InterviewSchedulingBot.Services.ConversationStateManager>();
+
 // Register Bot State Accessors
 builder.Services.AddSingleton<BotStateAccessors>();
 
@@ -154,6 +157,27 @@ builder.Services.AddTransient<IBot, InterviewSchedulingBotEnhanced>();
 
 var app = builder.Build();
 
+// === CONFIGURATION VERIFICATION ===
+// Verify and log API configuration
+var configuration = app.Services.GetRequiredService<IConfiguration>();
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+
+var apiKey = configuration["OpenWebUI:ApiKey"];
+var useMockData = configuration.GetValue<bool>("OpenWebUI:UseMockData", false);
+
+if (string.IsNullOrEmpty(apiKey))
+{
+    logger.LogWarning("OpenWebUI API key not found - using mock data for responses");
+}
+else if (useMockData)
+{
+    logger.LogWarning("OpenWebUI mock data enabled by configuration - API calls will be simulated");
+}
+else
+{
+    logger.LogInformation("OpenWebUI configured with API key - will make real API calls");
+}
+
 // === DATABASE INITIALIZATION ===
 // Ensure database is created and apply migrations
 using (var scope = app.Services.CreateScope())
@@ -196,6 +220,12 @@ app.UseRouting();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Set chat interface as default route instead of old dashboard
+app.MapGet("/", context => {
+    context.Response.Redirect("/api/chat");
+    return Task.CompletedTask;
+});
 
 // Log architectural information
 var architectureLogger = app.Services.GetRequiredService<ILogger<Program>>();
