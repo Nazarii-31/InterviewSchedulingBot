@@ -269,7 +269,30 @@ namespace InterviewSchedulingBot.Services.Integration
 
         private string CreateFallbackTextResponse(object context)
         {
-            return "I found some scheduling options for you. Let me know if you'd like to see more details or try different criteria.";
+            // Analyze the context to provide more appropriate fallback responses
+            var contextStr = context?.ToString() ?? "";
+            var contextJson = JsonSerializer.Serialize(context);
+            
+            // Check if this is a greeting context
+            if (contextJson.Contains("greeting") || contextJson.Contains("hello") || contextJson.Contains("UserName"))
+            {
+                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots, schedule meetings, and manage your calendar using natural language. What would you like me to help you with today?";
+            }
+            
+            // Check if this is a help context
+            if (contextJson.Contains("help") || contextJson.Contains("Help"))
+            {
+                return "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots using natural language\n• Schedule interviews and meetings\n• Check calendar availability\n• Answer questions about scheduling\n\nJust ask me in plain English what you need!";
+            }
+            
+            // Check if this is an error context
+            if (contextJson.Contains("error") || contextJson.Contains("Error"))
+            {
+                return "I apologize, but I encountered an issue. Please try rephrasing your request or ask me something like 'Find slots tomorrow morning' or 'Schedule an interview next week'.";
+            }
+            
+            // Default response for other contexts
+            return "I'm here to help you with interview scheduling! You can ask me to find time slots, schedule meetings, or check availability using natural language. How can I assist you today?";
         }
     }
 }

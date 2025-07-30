@@ -368,33 +368,7 @@ namespace InterviewSchedulingBot.Controllers
             cursor: not-allowed;
         }
 
-        .examples-panel {
-            background-color: #fff4ce;
-            border: 1px solid #fed100;
-            border-radius: 4px;
-            padding: 16px;
-            margin: 16px 0;
-        }
 
-        .examples-title {
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #323130;
-        }
-
-        .example-query {
-            background-color: #f8f8f8;
-            border-radius: 4px;
-            padding: 8px 12px;
-            margin: 4px 0;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            border: 1px solid #e1dfdd;
-        }
-
-        .example-query:hover {
-            background-color: #e1dfdd;
-        }
 
         .typing-indicator {
             display: none;
@@ -592,15 +566,6 @@ namespace InterviewSchedulingBot.Controllers
             
             <div class=""chat-container"">
                 <div class=""messages-container"" id=""messagesContainer"">
-                    <div class=""examples-panel"">
-                        <div class=""examples-title"">💡 Try these natural language queries:</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Find slots on Thursday afternoon')"">Find slots on Thursday afternoon</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Are there any slots next Monday?')"">Are there any slots next Monday?</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Show me morning availability tomorrow')"">Show me morning availability tomorrow</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Find a 30-minute slot this week')"">Find a 30-minute slot this week</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Schedule an interview')"">Schedule an interview</div>
-                        <div class=""example-query"" onclick=""sendExampleQuery('Help')"">Help</div>
-                    </div>
                     <div class=""typing-indicator"" id=""typingIndicator"">Bot is thinking...</div>
                 </div>
                 
@@ -776,12 +741,6 @@ namespace InterviewSchedulingBot.Controllers
                 hideTypingIndicator();
                 setLoading(false);
             }
-        }
-
-        function sendExampleQuery(query) {
-            const messageInput = document.getElementById('messageInput');
-            messageInput.value = query;
-            sendMessage();
         }
 
         function addMessage(text, from, isBot, attachments = []) {

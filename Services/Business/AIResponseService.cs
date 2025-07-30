@@ -328,6 +328,13 @@ namespace InterviewSchedulingBot.Services.Business
                     $"Clearly state what action will be taken, include relevant details to verify, " +
                     $"use professional but friendly tone, provide easy confirmation/modification options.",
                 
+                "general_response" => 
+                    $"You are a helpful AI assistant for interview scheduling. The user said: '{userQuery}'. " +
+                    $"Context: {contextJson}. " +
+                    $"Respond naturally and conversationally. If they're asking about scheduling, offer to help. " +
+                    $"If it's general conversation, be friendly but guide toward scheduling topics. " +
+                    $"Keep responses concise, helpful, and encouraging.",
+                
                 _ => $"You are a helpful AI assistant for interview scheduling. Generate an appropriate, conversational response for: {contextJson}"
             };
 
@@ -345,15 +352,68 @@ namespace InterviewSchedulingBot.Services.Business
             // Generate contextually appropriate fallbacks based on response type
             return request.ResponseType switch
             {
+                "greeting_message" => "Hi there! 👋 Welcome to the Interview Scheduling Bot! I'm here to help you find and schedule interview slots using natural language. You can ask me things like 'Find slots on Thursday afternoon' or 'Are there any slots next Monday?' How can I help you today?",
                 "slot_suggestions" => "I found some scheduling options for you. Let me know if you'd like to see more details or try different criteria.",
                 "conflict_explanation" => "I couldn't find suitable slots that work for everyone. Would you like to try different dates or times?",
                 "welcome_message" => "Welcome to the Interview Scheduling Bot! 👋 I can help you find interview slots using natural language. Try asking me something like 'Find slots on Thursday afternoon'",
-                "error_message" => "I encountered an issue processing your request. Please try again or rephrase your query.",
+                "error_message" => GetContextualErrorMessage(request),
                 "follow_up_question" => "What would you like me to help you with next?",
-                "help_message" => "I can help you find and schedule interview slots. Try natural language queries like 'Find slots tomorrow morning' or 'Schedule an interview for next week'.",
+                "help_message" => GetContextualHelpMessage(request),
                 "confirmation_message" => "I'm ready to proceed with your request. Please confirm if this looks correct.",
-                _ => "I'm here to help with your scheduling needs. How can I assist you today?"
+                "general_response" => GetGeneralAIResponse(request),
+                _ => GetGeneralAIResponse(request)
             };
+        }
+
+        private string GetContextualErrorMessage(AIResponseRequest request)
+        {
+            var contextInfo = request.Context?.ToString() ?? "";
+            if (contextInfo.Contains("unknown_intent"))
+            {
+                return "I'm not sure I understand what you're asking for. Could you try rephrasing? For example, you could say 'Find slots tomorrow morning' or 'Schedule an interview next week'.";
+            }
+            return "I encountered an issue processing your request. Please try again or rephrase your query.";
+        }
+
+        private string GetContextualHelpMessage(AIResponseRequest request)
+        {
+            var contextJson = JsonSerializer.Serialize(request.Context);
+            if (contextJson.Contains("general_help"))
+            {
+                return "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots (\"Find slots Thursday afternoon\")\n• Schedule interviews (\"Schedule an interview\")\n• Show upcoming interviews (\"Show my interviews\")\n• Natural language queries (\"Are there any morning slots next week?\")\n\nJust ask me in plain English what you need help with!";
+            }
+            return "I can help you find and schedule interview slots. Try natural language queries like 'Find slots tomorrow morning' or 'Schedule an interview for next week'.";
+        }
+
+        private string GetGeneralAIResponse(AIResponseRequest request)
+        {
+            var userQuery = request.UserQuery?.ToLowerInvariant() ?? "";
+            
+            // Check if this is a greeting
+            if (IsGreeting(userQuery))
+            {
+                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available interview slots, schedule meetings, and manage your calendar using natural language. What would you like me to help you with today?";
+            }
+            
+            // Check if this contains time/scheduling keywords
+            if (ContainsSchedulingKeywords(userQuery))
+            {
+                return "I can help you with that scheduling request! Let me know more details about what you're looking for, such as the preferred day, time, or duration.";
+            }
+            
+            return "I'm here to help with your scheduling needs! You can ask me to find interview slots, schedule meetings, or check availability using natural language. How can I assist you today?";
+        }
+
+        private bool IsGreeting(string message)
+        {
+            var greetingKeywords = new[] { "hi", "hello", "hey", "good morning", "good afternoon", "good evening", "start", "greetings" };
+            return greetingKeywords.Any(keyword => message.Contains(keyword));
+        }
+
+        private bool ContainsSchedulingKeywords(string message)
+        {
+            var schedulingKeywords = new[] { "schedule", "slot", "time", "meeting", "interview", "available", "book", "find", "when", "calendar" };
+            return schedulingKeywords.Any(keyword => message.Contains(keyword));
         }
 
         private ParsedQueryResult PerformFallbackParsing(string query)

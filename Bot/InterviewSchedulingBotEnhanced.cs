@@ -341,7 +341,7 @@ namespace InterviewBot.Bot
             // Remove bot mentions if present
             messageText = RemoveBotMentions(messageText, turnContext);
             
-            // Route based on intent
+            // Route based on intent - check for specific commands first
             if (IsSchedulingIntent(messageText))
             {
                 await dialogContext.BeginDialogAsync(nameof(ScheduleInterviewDialog), null, cancellationToken);
@@ -363,19 +363,69 @@ namespace InterviewBot.Bot
             {
                 await ShowGreetingMessageAsync(turnContext, cancellationToken);
             }
-            else
+            else if (ContainsTimeOrDayReference(messageText))
             {
                 // Check if this might be a natural language query by looking for time/day references
-                if (ContainsTimeOrDayReference(messageText))
+                _logger.LogInformation("Detected potential slot query: {Message}", messageText);
+                await dialogContext.BeginDialogAsync(nameof(FindSlotsDialog), turnContext.Activity.Text, cancellationToken);
+            }
+            else
+            {
+                // For ANY other message, use AI response service instead of showing unknown intent
+                _logger.LogInformation("Processing general message with AI: {Message}", messageText);
+                await HandleGeneralMessageWithAIAsync(turnContext, cancellationToken);
+            }
+        }
+        
+        private async Task HandleGeneralMessageWithAIAsync(ITurnContext turnContext, CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Get conversation context
+                var userProfile = await _accessors.UserProfileAccessor.GetAsync(
+                    turnContext, () => new UserProfile(), cancellationToken);
+                
+                // Create context for AI response
+                var conversationContext = new InterviewSchedulingBot.Services.Business.ConversationContext
                 {
-                    _logger.LogInformation("Detected potential slot query: {Message}", messageText);
-                    await dialogContext.BeginDialogAsync(nameof(FindSlotsDialog), turnContext.Activity.Text, cancellationToken);
-                }
-                else
+                    PreviousMessages = userProfile.ConversationHistory?.TakeLast(5).ToList() ?? new List<string>(),
+                    CurrentIntent = "general_conversation"
+                };
+                
+                // Generate AI response for the general message
+                var response = await _aiResponseService.GenerateResponseAsync(
+                    new AIResponseRequest
+                    {
+                        ResponseType = "general_response",
+                        UserQuery = turnContext.Activity.Text ?? "",
+                        Context = new { 
+                            UserName = turnContext.Activity.From.Name ?? "there",
+                            ConversationContext = conversationContext,
+                            IsGeneralQuery = true
+                        }
+                    },
+                    cancellationToken);
+                
+                await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+                
+                // Update conversation history
+                userProfile.ConversationHistory ??= new List<string>();
+                userProfile.ConversationHistory.Add($"User: {turnContext.Activity.Text}");
+                userProfile.ConversationHistory.Add($"Bot: {response}");
+                
+                // Keep only last 10 messages to avoid memory bloat
+                if (userProfile.ConversationHistory.Count > 10)
                 {
-                    // Unknown intent - provide helpful guidance
-                    await ShowUnknownIntentMessageAsync(turnContext, cancellationToken);
+                    userProfile.ConversationHistory = userProfile.ConversationHistory.TakeLast(10).ToList();
                 }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error handling general message with AI");
+                
+                // Fallback to a helpful response
+                var fallbackResponse = "I'm here to help with interview scheduling! You can ask me to find time slots, schedule meetings, or check availability. For example, try 'Find slots tomorrow morning' or 'Schedule an interview next week'.";
+                await turnContext.SendActivityAsync(MessageFactory.Text(fallbackResponse), cancellationToken);
             }
         }
         
