@@ -29,6 +29,9 @@ namespace InterviewSchedulingBot.Services.Integration
         Task<string> FormatAvailableSlotsAsync(List<TimeSlot> slots, SlotParameters parameters);
         Task<string> GenerateClarificationAsync(SlotParameters parameters, List<MessageHistoryItem> history);
         Task<string> GenerateNoSlotsResponseAsync(SlotParameters parameters, List<MessageHistoryItem> history);
+        
+        // Specialized parameter extraction assistant
+        Task<ParameterExtractionResponse> ExtractParametersAsAssistantAsync(string message);
     }
 
     public class OpenWebUIClient : IOpenWebUIClient
@@ -1650,6 +1653,325 @@ namespace InterviewSchedulingBot.Services.Integration
             };
             
             return noSlotsResponses[new Random().Next(noSlotsResponses.Length)];
+        }
+
+        // Specialized parameter extraction assistant implementation
+        public async Task<ParameterExtractionResponse> ExtractParametersAsAssistantAsync(string message)
+        {
+            // If OpenWebUI is not configured, use fallback parameter extraction
+            if (_useMockData)
+            {
+                return ExtractParametersAsAssistantFallback(message);
+            }
+
+            try
+            {
+                var systemPrompt = @"You are a specialized parameter extraction assistant for an Interview Scheduling Bot. Your ONLY job is to analyze user messages and extract scheduling parameters in structured JSON format.
+
+When a user asks about finding available times or scheduling meetings, ONLY respond with the JSON structure below. Do NOT provide general scheduling advice or conversation.
+
+Required JSON format:
+{
+  ""isSlotRequest"": true,
+  ""parameters"": {
+    ""duration"": 60,
+    ""timeFrame"": {
+      ""type"": ""specific_day"", 
+      ""startDate"": ""2025-07-31"",
+      ""endDate"": ""2025-07-31"",
+      ""timeOfDay"": ""morning""
+    },
+    ""participants"": [""john.doe@example.com"", ""jane.smith@example.com""]
+  }
+}
+
+For timeFrame.type, use one of: ""specific_day"", ""this_week"", ""next_week"", ""date_range""
+For timeOfDay, use one of: ""morning"", ""afternoon"", ""evening"", ""all_day"", or null if not specified
+
+For non-slot requests, respond with:
+{
+  ""isSlotRequest"": false,
+  ""suggestedResponse"": ""A helpful message the bot can use to respond""
+}
+
+IMPORTANT:
+- ONLY output valid JSON
+- Today's date is " + DateTime.Today.ToString("yyyy-MM-dd") + @"
+- Default duration is 60 minutes if not specified
+- Extract emails or names for participants when available
+- Output NOTHING except the JSON structure";
+
+                var request = new
+                {
+                    model = _selectedModel,
+                    messages = new[]
+                    {
+                        new
+                        {
+                            role = "system",
+                            content = systemPrompt
+                        },
+                        new
+                        {
+                            role = "user",
+                            content = message
+                        }
+                    },
+                    temperature = 0.1, // Low temperature for consistent structured output
+                    max_tokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 500),
+                    stream = false
+                };
+
+                var content = new StringContent(
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+
+                var response = await _httpClient.PostAsync("chat/completions", content, cts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+
+                    if (responseObj.TryGetProperty("choices", out var choicesElement) &&
+                        choicesElement.GetArrayLength() > 0)
+                    {
+                        var firstChoice = choicesElement[0];
+                        if (firstChoice.TryGetProperty("message", out var messageElement) &&
+                            messageElement.TryGetProperty("content", out var contentElement))
+                        {
+                            var jsonResult = contentElement.GetString();
+                            if (!string.IsNullOrEmpty(jsonResult))
+                            {
+                                try
+                                {
+                                    var extractedResponse = JsonSerializer.Deserialize<ParameterExtractionResponse>(jsonResult,
+                                        new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+                                    
+                                    if (extractedResponse != null)
+                                    {
+                                        _logger.LogInformation("Successfully extracted parameters using OpenWebUI");
+                                        return extractedResponse;
+                                    }
+                                }
+                                catch (JsonException ex)
+                                {
+                                    _logger.LogWarning(ex, "Failed to parse JSON response from OpenWebUI: {Response}", jsonResult);
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("OpenWebUI API returned error: {StatusCode} - {ReasonPhrase}", 
+                        response.StatusCode, response.ReasonPhrase);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error extracting parameters from OpenWebUI");
+            }
+
+            return ExtractParametersAsAssistantFallback(message);
+        }
+
+        private ParameterExtractionResponse ExtractParametersAsAssistantFallback(string message)
+        {
+            var lowerMessage = message.ToLowerInvariant();
+            
+            // Check if this is a slot finding request
+            bool isSlotRequest = lowerMessage.Contains("find") && (lowerMessage.Contains("slot") || lowerMessage.Contains("time") || lowerMessage.Contains("available")) ||
+                                lowerMessage.Contains("schedule") || lowerMessage.Contains("meeting") || lowerMessage.Contains("interview") ||
+                                lowerMessage.Contains("when") && (lowerMessage.Contains("free") || lowerMessage.Contains("available")) ||
+                                lowerMessage.Contains("book") || lowerMessage.Contains("reserve") ||
+                                lowerMessage.Contains("availability") || lowerMessage.Contains("open");
+
+            if (!isSlotRequest)
+            {
+                // Generate appropriate suggested response for non-slot requests
+                string suggestedResponse;
+                
+                if (lowerMessage.Contains("hello") || lowerMessage.Contains("hi") || lowerMessage.Contains("hey"))
+                {
+                    suggestedResponse = "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots and check calendar availability using natural language. What would you like me to help you with today?";
+                }
+                else if (lowerMessage.Contains("help") || lowerMessage.Contains("what can you do"))
+                {
+                    suggestedResponse = "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots using natural language\n• Check calendar availability for multiple participants\n• Analyze scheduling conflicts\n• Suggest optimal meeting times\n\nJust ask me in plain English what you need!";
+                }
+                else if (lowerMessage.Contains("thank") || lowerMessage.Contains("thanks"))
+                {
+                    suggestedResponse = "You're welcome! I'm here to help with your scheduling needs. Is there anything else you'd like me to assist you with?";
+                }
+                else
+                {
+                    suggestedResponse = "I'm here to help with finding available time slots! You can ask me to check availability, find open times, or analyze schedules using natural language. How can I assist you today?";
+                }
+
+                return new ParameterExtractionResponse
+                {
+                    IsSlotRequest = false,
+                    SuggestedResponse = suggestedResponse
+                };
+            }
+
+            // Extract parameters for slot requests
+            var parameters = new ParameterExtractionData();
+            var timeFrame = new TimeFrameData();
+            
+            // Extract duration
+            if (lowerMessage.Contains("30 min") || lowerMessage.Contains("thirty min"))
+                parameters.Duration = 30;
+            else if (lowerMessage.Contains("90 min") || lowerMessage.Contains("1.5 hour") || lowerMessage.Contains("one and half hour"))
+                parameters.Duration = 90;
+            else if (lowerMessage.Contains("2 hour") || lowerMessage.Contains("two hour"))
+                parameters.Duration = 120;
+            else if (lowerMessage.Contains("45 min") || lowerMessage.Contains("forty-five min"))
+                parameters.Duration = 45;
+            else
+                parameters.Duration = 60; // Default
+            
+            // Extract time of day
+            if (lowerMessage.Contains("morning"))
+                timeFrame.TimeOfDay = "morning";
+            else if (lowerMessage.Contains("afternoon"))
+                timeFrame.TimeOfDay = "afternoon";
+            else if (lowerMessage.Contains("evening"))
+                timeFrame.TimeOfDay = "evening";
+            else if (lowerMessage.Contains("all day") || lowerMessage.Contains("any time"))
+                timeFrame.TimeOfDay = "all_day";
+            
+            // Extract time frame type and dates
+            var today = DateTime.Today;
+            
+            if (lowerMessage.Contains("tomorrow"))
+            {
+                timeFrame.Type = "specific_day";
+                var tomorrow = today.AddDays(1);
+                timeFrame.StartDate = tomorrow.ToString("yyyy-MM-dd");
+                timeFrame.EndDate = tomorrow.ToString("yyyy-MM-dd");
+            }
+            else if (lowerMessage.Contains("this week"))
+            {
+                timeFrame.Type = "this_week";
+                // Start from today, end on Sunday of this week
+                var daysUntilSunday = 7 - (int)today.DayOfWeek;
+                timeFrame.StartDate = today.ToString("yyyy-MM-dd");
+                timeFrame.EndDate = today.AddDays(daysUntilSunday).ToString("yyyy-MM-dd");
+            }
+            else if (lowerMessage.Contains("next week"))
+            {
+                timeFrame.Type = "next_week";
+                // Start from next Monday, end on next Sunday
+                var daysUntilNextMonday = 7 - (int)today.DayOfWeek + 1;
+                if (today.DayOfWeek == DayOfWeek.Sunday) daysUntilNextMonday = 1;
+                
+                var nextMonday = today.AddDays(daysUntilNextMonday);
+                timeFrame.StartDate = nextMonday.ToString("yyyy-MM-dd");
+                timeFrame.EndDate = nextMonday.AddDays(6).ToString("yyyy-MM-dd");
+            }
+            else if (lowerMessage.Contains("monday"))
+            {
+                timeFrame.Type = "specific_day";
+                var nextMonday = GetNextWeekday(today, DayOfWeek.Monday);
+                timeFrame.StartDate = nextMonday.ToString("yyyy-MM-dd");
+                timeFrame.EndDate = nextMonday.ToString("yyyy-MM-dd");
+            }
+            else if (lowerMessage.Contains("tuesday"))
+            {
+                timeFrame.Type = "specific_day";
+                var nextTuesday = GetNextWeekday(today, DayOfWeek.Tuesday);
+                timeFrame.StartDate = nextTuesday.ToString("yyyy-MM-dd");
+                timeFrame.EndDate = nextTuesday.ToString("yyyy-MM-dd");
+            }
+            else if (lowerMessage.Contains("wednesday"))
+            {
+                timeFrame.Type = "specific_day";
+                var nextWednesday = GetNextWeekday(today, DayOfWeek.Wednesday);
+                timeFrame.StartDate = nextWednesday.ToString("yyyy-MM-dd");
+                timeFrame.EndDate = nextWednesday.ToString("yyyy-MM-dd");
+            }
+            else if (lowerMessage.Contains("thursday"))
+            {
+                timeFrame.Type = "specific_day";
+                var nextThursday = GetNextWeekday(today, DayOfWeek.Thursday);
+                timeFrame.StartDate = nextThursday.ToString("yyyy-MM-dd");
+                timeFrame.EndDate = nextThursday.ToString("yyyy-MM-dd");
+            }
+            else if (lowerMessage.Contains("friday"))
+            {
+                timeFrame.Type = "specific_day";
+                var nextFriday = GetNextWeekday(today, DayOfWeek.Friday);
+                timeFrame.StartDate = nextFriday.ToString("yyyy-MM-dd");
+                timeFrame.EndDate = nextFriday.ToString("yyyy-MM-dd");
+            }
+            else
+            {
+                // Default to specific day (today or next business day)
+                timeFrame.Type = "specific_day";
+                var targetDate = today.DayOfWeek == DayOfWeek.Saturday || today.DayOfWeek == DayOfWeek.Sunday 
+                    ? GetNextWeekday(today, DayOfWeek.Monday)
+                    : today;
+                timeFrame.StartDate = targetDate.ToString("yyyy-MM-dd");
+                timeFrame.EndDate = targetDate.ToString("yyyy-MM-dd");
+            }
+            
+            parameters.TimeFrame = timeFrame;
+            
+            // Extract participants (look for email addresses or names with @)
+            var participants = new List<string>();
+            var words = message.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            
+            foreach (var word in words)
+            {
+                if (word.Contains("@") && word.Contains("."))
+                {
+                    // Clean up the email (remove punctuation at the end)
+                    var cleanedEmail = word.TrimEnd('.', ',', ';', ':', '!', '?');
+                    participants.Add(cleanedEmail);
+                }
+            }
+            
+            // Look for common name patterns like "with John" or "John and Mary"
+            if (participants.Count == 0)
+            {
+                var nameKeywords = new[] { "with", "include", "and" };
+                foreach (var keyword in nameKeywords)
+                {
+                    var keywordIndex = Array.FindIndex(words, w => w.ToLowerInvariant() == keyword);
+                    if (keywordIndex >= 0 && keywordIndex < words.Length - 1)
+                    {
+                        // Look for names after the keyword
+                        for (int i = keywordIndex + 1; i < words.Length && i < keywordIndex + 4; i++)
+                        {
+                            var potentialName = words[i].Trim(',', '.', ';', ':', '!', '?');
+                            if (potentialName.Length > 1 && char.IsUpper(potentialName[0]))
+                            {
+                                participants.Add($"{potentialName.ToLowerInvariant()}@example.com");
+                            }
+                        }
+                    }
+                }
+            }
+            
+            parameters.Participants = participants;
+
+            return new ParameterExtractionResponse
+            {
+                IsSlotRequest = true,
+                Parameters = parameters
+            };
+        }
+
+        private DateTime GetNextWeekday(DateTime start, DayOfWeek day)
+        {
+            var daysToAdd = ((int)day - (int)start.DayOfWeek + 7) % 7;
+            return start.AddDays(daysToAdd == 0 ? 7 : daysToAdd);
         }
     }
 

@@ -98,4 +98,27 @@ namespace InterviewSchedulingBot.Models
         public string? TimeOfDay { get; set; }
         public string? SpecificDay { get; set; }
     }
+
+    // New models for specialized parameter extraction assistant
+    public class ParameterExtractionResponse
+    {
+        public bool IsSlotRequest { get; set; }
+        public ParameterExtractionData? Parameters { get; set; }
+        public string? SuggestedResponse { get; set; }
+    }
+
+    public class ParameterExtractionData
+    {
+        public int Duration { get; set; } = 60; // Default 60 minutes
+        public TimeFrameData TimeFrame { get; set; } = new TimeFrameData();
+        public List<string> Participants { get; set; } = new List<string>();
+    }
+
+    public class TimeFrameData
+    {
+        public string Type { get; set; } = "specific_day"; // "specific_day", "this_week", "next_week", "date_range"
+        public string? StartDate { get; set; } // Format: "2025-07-31"
+        public string? EndDate { get; set; } // Format: "2025-07-31"  
+        public string? TimeOfDay { get; set; } // "morning", "afternoon", "evening", "all_day", or null
+    }
 }
