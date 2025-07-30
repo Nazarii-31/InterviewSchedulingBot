@@ -1,5 +1,11 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using InterviewSchedulingBot.Models;
 
 namespace InterviewSchedulingBot.Services.Integration
@@ -31,32 +37,46 @@ namespace InterviewSchedulingBot.Services.Integration
         private readonly IConfiguration _configuration;
         private readonly ILogger<OpenWebUIClient> _logger;
         private readonly bool _useMockData;
+        private readonly string _selectedModel;
         
         public OpenWebUIClient(
-            HttpClient httpClient, 
-            IConfiguration configuration, 
+            HttpClient httpClient,
+            IConfiguration configuration,
             ILogger<OpenWebUIClient> logger)
         {
             _httpClient = httpClient;
             _configuration = configuration;
             _logger = logger;
             
-            // Only use mock data if explicitly configured or if API key is missing
-            _useMockData = _configuration.GetValue<bool>("OpenWebUI:UseMockData", false) ||
-                          string.IsNullOrEmpty(_configuration["OpenWebUI:ApiKey"]);
+            // Configure for your specific self-hosted instance
+            var baseUrl = configuration["OpenWebUI:BaseUrl"];
             
-            if (!_useMockData)
+            // Only use mock data if explicitly configured or if base URL is missing/empty
+            _useMockData = configuration.GetValue<bool>("OpenWebUI:UseMockData", false) ||
+                          string.IsNullOrEmpty(baseUrl);
+            
+            if (!_useMockData && !string.IsNullOrEmpty(baseUrl))
             {
-                var baseUrl = _configuration["OpenWebUI:BaseUrl"];
-                var apiKey = _configuration["OpenWebUI:ApiKey"];
-                
                 _httpClient.BaseAddress = new Uri(baseUrl);
-                _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
-                _logger.LogInformation("OpenWebUI client configured with base URL: {BaseUrl}", baseUrl);
+                
+                // Add API key if your instance requires it
+                var apiKey = configuration["OpenWebUI:ApiKey"];
+                if (!string.IsNullOrEmpty(apiKey))
+                {
+                    _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                }
+                
+                // Configure model - use mistral:7b as recommended
+                _selectedModel = configuration["OpenWebUI:Model"] ?? "mistral:7b";
+                
+                _logger.LogInformation("OpenWebUI client configured for self-hosted instance at: {BaseUrl} using model: {Model}", 
+                    baseUrl, _selectedModel);
             }
             else
             {
-                _logger.LogWarning("Using mock data - OpenWebUI integration disabled or API key missing");
+                // Set default model for mock data scenarios
+                _selectedModel = configuration["OpenWebUI:Model"] ?? "mistral:7b";
+                _logger.LogWarning("Using mock data - OpenWebUI integration disabled or configuration missing");
             }
         }
 
@@ -66,41 +86,92 @@ namespace InterviewSchedulingBot.Services.Integration
             {
                 if (_useMockData)
                 {
-                    _logger.LogWarning("Using mock data - OpenWebUI integration disabled or API key missing");
+                    _logger.LogWarning("Using mock data - OpenWebUI integration disabled or configuration missing");
                     return GenerateMockResponse(query);
                 }
                 
                 // Log that we're making a real API call
-                _logger.LogInformation("Making API call to OpenWebUI with query: {Query}", query);
+                _logger.LogInformation("Making API call to OpenWebUI with query: {Query} using model: {Model}", query, _selectedModel);
                 
                 var request = new
                 {
-                    message = query,
-                    conversation_id = conversationId
+                    model = _selectedModel,
+                    messages = new[]
+                    {
+                        new
+                        {
+                            role = "system",
+                            content = "You are an AI interview scheduling assistant. Provide helpful, concise responses."
+                        },
+                        new
+                        {
+                            role = "user", 
+                            content = query
+                        }
+                    },
+                    temperature = _configuration.GetValue<double>("OpenWebUI:Temperature", 0.7),
+                    max_tokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 1000),
+                    stream = false
                 };
                 
                 var content = new StringContent(
-                    JsonSerializer.Serialize(request),
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
                     Encoding.UTF8,
                     "application/json");
+                
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
                     
-                var response = await _httpClient.PostAsync("completions", content);
-                response.EnsureSuccessStatusCode();
+                var response = await _httpClient.PostAsync("chat/completions", content, cts.Token);
                 
-                var responseContent = await response.Content.ReadAsStringAsync();
-                var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
-                
-                if (responseObj.TryGetProperty("response", out var responseElement))
+                if (response.IsSuccessStatusCode)
                 {
-                    return responseElement.GetString() ?? "I couldn't generate a response. Please try again.";
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+                    
+                    if (responseObj.TryGetProperty("choices", out var choicesElement) && 
+                        choicesElement.GetArrayLength() > 0)
+                    {
+                        var firstChoice = choicesElement[0];
+                        if (firstChoice.TryGetProperty("message", out var messageElement) &&
+                            messageElement.TryGetProperty("content", out var contentElement))
+                        {
+                            var result = contentElement.GetString();
+                            if (!string.IsNullOrEmpty(result))
+                            {
+                                _logger.LogInformation("Successfully received response from OpenWebUI");
+                                return result;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("OpenWebUI API returned error: {StatusCode} - {ReasonPhrase}", 
+                        response.StatusCode, response.ReasonPhrase);
+                    
+                    if (response.StatusCode == System.Net.HttpStatusCode.MethodNotAllowed)
+                    {
+                        _logger.LogError("405 Method Not Allowed - Check if the OpenWebUI endpoint and HTTP method are correct");
+                    }
                 }
                 
-                return "I couldn't generate a response. Please try again.";
+                return GenerateMockResponse(query);
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "HTTP error calling OpenWebUI - falling back to mock data");
+                return GenerateMockResponse(query);
+            }
+            catch (TaskCanceledException ex)
+            {
+                _logger.LogError(ex, "OpenWebUI request timed out - falling back to mock data");
+                return GenerateMockResponse(query);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error calling OpenWebUI");
-                return $"I'm having trouble connecting to my AI service. Please try again. Error: {ex.Message}";
+                _logger.LogError(ex, "Unexpected error calling OpenWebUI - falling back to mock data");
+                return GenerateMockResponse(query);
             }
         }
 
@@ -127,12 +198,42 @@ namespace InterviewSchedulingBot.Services.Integration
 
             try
             {
+                var messages = new List<object>
+                {
+                    new
+                    {
+                        role = "system",
+                        content = "You are an AI interview scheduling assistant. Provide helpful, clear, and professional responses."
+                    }
+                };
+
+                // Add conversation history
+                if (history != null && history.Any())
+                {
+                    foreach (var item in history.TakeLast(10)) // Limit history to last 10 messages
+                    {
+                        messages.Add(new
+                        {
+                            role = item.IsFromBot ? "assistant" : "user",
+                            content = item.Message
+                        });
+                    }
+                }
+
+                // Add current message
+                messages.Add(new
+                {
+                    role = "user",
+                    content = message
+                });
+
                 var request = new
                 {
-                    message = message,
-                    conversation_id = conversationId,
-                    history = history.Select(h => new { role = h.IsFromBot ? "assistant" : "user", content = h.Message }).ToArray(),
-                    max_tokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 1000)
+                    model = _selectedModel,
+                    messages = messages.ToArray(),
+                    temperature = _configuration.GetValue<double>("OpenWebUI:Temperature", 0.7),
+                    max_tokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 1000),
+                    stream = false
                 };
 
                 var content = new StringContent(
@@ -143,26 +244,33 @@ namespace InterviewSchedulingBot.Services.Integration
                 var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
                 using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
                 
-                var response = await _httpClient.PostAsync("chat", content, cts.Token);
+                var response = await _httpClient.PostAsync("chat/completions", content, cts.Token);
 
                 if (response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
                     var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
 
-                    if (responseObj.TryGetProperty("response", out var responseElement))
+                    if (responseObj.TryGetProperty("choices", out var choicesElement) &&
+                        choicesElement.GetArrayLength() > 0)
                     {
-                        var result = responseElement.GetString();
-                        if (!string.IsNullOrEmpty(result))
+                        var firstChoice = choicesElement[0];
+                        if (firstChoice.TryGetProperty("message", out var messageElement) &&
+                            messageElement.TryGetProperty("content", out var contentElement))
                         {
-                            _logger.LogInformation("Received direct response from OpenWebUI");
-                            return result;
+                            var result = contentElement.GetString();
+                            if (!string.IsNullOrEmpty(result))
+                            {
+                                _logger.LogInformation("Received direct response from OpenWebUI");
+                                return result;
+                            }
                         }
                     }
                 }
                 else
                 {
-                    _logger.LogWarning("OpenWebUI API returned error: {StatusCode}", response.StatusCode);
+                    _logger.LogWarning("OpenWebUI API returned error: {StatusCode} - {ReasonPhrase}", 
+                        response.StatusCode, response.ReasonPhrase);
                 }
             }
             catch (OperationCanceledException)
@@ -216,6 +324,7 @@ namespace InterviewSchedulingBot.Services.Integration
                 };
 
                 var request = new {
+                    model = _selectedModel,
                     messages = new[] {
                         new {
                             role = "system",
@@ -223,15 +332,16 @@ namespace InterviewSchedulingBot.Services.Integration
                         },
                         new {
                             role = "user",
-                            content = JsonSerializer.Serialize(slotContext)
+                            content = $"Please format these available time slots in a helpful way: {JsonSerializer.Serialize(slotContext)}"
                         }
                     },
-                    temperature = 0.7,
-                    max_tokens = 1000
+                    temperature = _configuration.GetValue<double>("OpenWebUI:Temperature", 0.7),
+                    max_tokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 1000),
+                    stream = false
                 };
 
                 var content = new StringContent(
-                    JsonSerializer.Serialize(request),
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
                     Encoding.UTF8,
                     "application/json");
 
@@ -260,11 +370,15 @@ namespace InterviewSchedulingBot.Services.Integration
                         }
                     }
                 }
+                else
+                {
+                    _logger.LogWarning("OpenWebUI API returned error: {StatusCode} - {ReasonPhrase}", 
+                        response.StatusCode, response.ReasonPhrase);
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating slot response from OpenWebUI");
-                return GenerateSlotResponseFallback(slots, criteria);
             }
 
             return GenerateSlotResponseFallback(slots, criteria);
@@ -280,14 +394,42 @@ namespace InterviewSchedulingBot.Services.Integration
 
             try
             {
+                var messages = new List<object>
+                {
+                    new
+                    {
+                        role = "system",
+                        content = GetSystemPrompt("general")
+                    }
+                };
+
+                // Add conversation history
+                if (history != null && history.Any())
+                {
+                    foreach (var item in history.TakeLast(5)) // Limit history to last 5 messages
+                    {
+                        messages.Add(new
+                        {
+                            role = item.IsFromBot ? "assistant" : "user",
+                            content = item.Message
+                        });
+                    }
+                }
+
+                // Add current message
+                messages.Add(new
+                {
+                    role = "user",
+                    content = message
+                });
+
                 var request = new
                 {
-                    message = message,
-                    conversation_id = conversationId,
-                    history = history.Select(h => new { role = h.IsFromBot ? "assistant" : "user", content = h.Message }).ToArray(),
-                    max_tokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 1000),
+                    model = _selectedModel,
+                    messages = messages.ToArray(),
                     temperature = options.ResponseTemperature,
-                    system_prompt = GetSystemPrompt("general")
+                    max_tokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 1000),
+                    stream = false
                 };
 
                 var content = new StringContent(
@@ -298,21 +440,32 @@ namespace InterviewSchedulingBot.Services.Integration
                 var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
                 using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
 
-                var response = await _httpClient.PostAsync("chat", content, cts.Token);
+                var response = await _httpClient.PostAsync("chat/completions", content, cts.Token);
 
                 if (response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
                     var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
 
-                    if (responseObj.TryGetProperty("response", out var responseElement))
+                    if (responseObj.TryGetProperty("choices", out var choicesElement) &&
+                        choicesElement.GetArrayLength() > 0)
                     {
-                        var result = responseElement.GetString();
-                        if (!string.IsNullOrEmpty(result))
+                        var firstChoice = choicesElement[0];
+                        if (firstChoice.TryGetProperty("message", out var messageElement) &&
+                            messageElement.TryGetProperty("content", out var contentElement))
                         {
-                            return result;
+                            var result = contentElement.GetString();
+                            if (!string.IsNullOrEmpty(result))
+                            {
+                                return result;
+                            }
                         }
                     }
+                }
+                else
+                {
+                    _logger.LogWarning("OpenWebUI API returned error: {StatusCode} - {ReasonPhrase}", 
+                        response.StatusCode, response.ReasonPhrase);
                 }
             }
             catch (Exception ex)
@@ -578,18 +731,27 @@ namespace InterviewSchedulingBot.Services.Integration
             
             try
             {
-                _logger.LogInformation("Generating response with Open WebUI");
-                
-                var maxTokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 500);
-                var temperature = _configuration.GetValue<double>("OpenWebUI:Temperature", 0.7);
-                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                _logger.LogInformation("Generating response with Open WebUI using model: {Model}", _selectedModel);
                 
                 var request = new
                 {
-                    Prompt = prompt,
-                    Context = context,
-                    MaxTokens = maxTokens,
-                    Temperature = temperature
+                    model = _selectedModel,
+                    messages = new[]
+                    {
+                        new
+                        {
+                            role = "system",
+                            content = "You are an AI interview scheduling assistant. Provide helpful, clear responses."
+                        },
+                        new
+                        {
+                            role = "user",
+                            content = $"Context: {JsonSerializer.Serialize(context)}\n\nPrompt: {prompt}"
+                        }
+                    },
+                    temperature = _configuration.GetValue<double>("OpenWebUI:Temperature", 0.7),
+                    max_tokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 500),
+                    stream = false
                 };
                 
                 var content = new StringContent(
@@ -597,28 +759,36 @@ namespace InterviewSchedulingBot.Services.Integration
                     Encoding.UTF8,
                     "application/json");
                 
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 cts.CancelAfter(TimeSpan.FromMilliseconds(timeoutMs));
                 
-                var response = await _httpClient.PostAsync("generate", content, cts.Token);
+                var response = await _httpClient.PostAsync("chat/completions", content, cts.Token);
                 
                 if (response.IsSuccessStatusCode)
                 {
                     var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
-                    using var document = JsonDocument.Parse(responseContent);
+                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
                     
-                    if (document.RootElement.TryGetProperty("text", out var textElement))
+                    if (responseObj.TryGetProperty("choices", out var choicesElement) &&
+                        choicesElement.GetArrayLength() > 0)
                     {
-                        var result = textElement.GetString();
-                        if (!string.IsNullOrEmpty(result))
+                        var firstChoice = choicesElement[0];
+                        if (firstChoice.TryGetProperty("message", out var messageElement) &&
+                            messageElement.TryGetProperty("content", out var contentElement))
                         {
-                            _logger.LogInformation("Generated response in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
-                            return result;
+                            var result = contentElement.GetString();
+                            if (!string.IsNullOrEmpty(result))
+                            {
+                                _logger.LogInformation("Generated response in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+                                return result;
+                            }
                         }
                     }
                 }
                 
-                _logger.LogWarning("Open WebUI API generate returned error: {StatusCode}", response.StatusCode);
+                _logger.LogWarning("Open WebUI API generate returned error: {StatusCode} - {ReasonPhrase}", 
+                    response.StatusCode, response.ReasonPhrase);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
