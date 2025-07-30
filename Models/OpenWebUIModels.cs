@@ -88,4 +88,14 @@ namespace InterviewSchedulingBot.Models
             return StartDate.HasValue || !string.IsNullOrEmpty(TimeOfDay) || !string.IsNullOrEmpty(SpecificDay);
         }
     }
+
+    public class SlotRequest
+    {
+        public List<string>? Participants { get; set; }
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+        public int? DurationMinutes { get; set; }
+        public string? TimeOfDay { get; set; }
+        public string? SpecificDay { get; set; }
+    }
 }

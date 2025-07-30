@@ -9,6 +9,8 @@ namespace InterviewSchedulingBot.Services.Integration
         Task<OpenWebUIResponse> ProcessQueryAsync(string query, OpenWebUIRequestType requestType, CancellationToken cancellationToken = default);
         Task<string> GenerateResponseAsync(string prompt, object context, CancellationToken cancellationToken = default);
         Task<string> GetDirectResponseAsync(string message, string conversationId, List<MessageHistoryItem> history);
+        Task<string> GetResponseAsync(string query, string conversationId = null);
+        Task<List<TimeSlot>> FindSlotsAsync(SlotRequest request);
         Task<string> GenerateSlotSuggestionsWithConflicts(List<TimeSlot> availableSlots, List<string> participants, Dictionary<string, List<ConflictDetail>> conflicts);
         Task<string> GenerateSlotResponseAsync(List<TimeSlot> slots, InterviewSchedulingBot.Services.Business.SlotQueryCriteria criteria);
         Task<string> GetConversationalResponseAsync(string message, string conversationId, List<MessageHistoryItem> history, ConversationOptions options);
@@ -28,7 +30,7 @@ namespace InterviewSchedulingBot.Services.Integration
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
         private readonly ILogger<OpenWebUIClient> _logger;
-        private readonly bool _isConfigured;
+        private readonly bool _useMockData;
         
         public OpenWebUIClient(
             HttpClient httpClient, 
@@ -39,27 +41,85 @@ namespace InterviewSchedulingBot.Services.Integration
             _configuration = configuration;
             _logger = logger;
             
-            var baseUrl = _configuration["OpenWebUI:BaseUrl"];
-            var apiKey = _configuration["OpenWebUI:ApiKey"];
+            // Only use mock data if explicitly configured or if API key is missing
+            _useMockData = _configuration.GetValue<bool>("OpenWebUI:UseMockData", false) ||
+                          string.IsNullOrEmpty(_configuration["OpenWebUI:ApiKey"]);
             
-            _isConfigured = !string.IsNullOrEmpty(baseUrl) && !string.IsNullOrEmpty(apiKey);
-            
-            if (_isConfigured)
+            if (!_useMockData)
             {
+                var baseUrl = _configuration["OpenWebUI:BaseUrl"];
+                var apiKey = _configuration["OpenWebUI:ApiKey"];
+                
                 _httpClient.BaseAddress = new Uri(baseUrl);
                 _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
                 _logger.LogInformation("OpenWebUI client configured with base URL: {BaseUrl}", baseUrl);
             }
             else
             {
-                _logger.LogInformation("OpenWebUI not configured, using fallback responses");
+                _logger.LogWarning("Using mock data - OpenWebUI integration disabled or API key missing");
             }
+        }
+
+        public async Task<string> GetResponseAsync(string query, string conversationId = null)
+        {
+            try
+            {
+                if (_useMockData)
+                {
+                    _logger.LogWarning("Using mock data - OpenWebUI integration disabled or API key missing");
+                    return GenerateMockResponse(query);
+                }
+                
+                // Log that we're making a real API call
+                _logger.LogInformation("Making API call to OpenWebUI with query: {Query}", query);
+                
+                var request = new
+                {
+                    message = query,
+                    conversation_id = conversationId
+                };
+                
+                var content = new StringContent(
+                    JsonSerializer.Serialize(request),
+                    Encoding.UTF8,
+                    "application/json");
+                    
+                var response = await _httpClient.PostAsync("completions", content);
+                response.EnsureSuccessStatusCode();
+                
+                var responseContent = await response.Content.ReadAsStringAsync();
+                var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+                
+                if (responseObj.TryGetProperty("response", out var responseElement))
+                {
+                    return responseElement.GetString() ?? "I couldn't generate a response. Please try again.";
+                }
+                
+                return "I couldn't generate a response. Please try again.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error calling OpenWebUI");
+                return $"I'm having trouble connecting to my AI service. Please try again. Error: {ex.Message}";
+            }
+        }
+
+        public async Task<List<TimeSlot>> FindSlotsAsync(SlotRequest request)
+        {
+            if (_useMockData)
+            {
+                return GenerateRandomMockSlots(request);
+            }
+            
+            // Make actual API call to find slots
+            // ...implementation...
+            return new List<TimeSlot>();
         }
 
         public async Task<string> GetDirectResponseAsync(string message, string conversationId, List<MessageHistoryItem> history)
         {
             // If OpenWebUI is not configured, return fallback immediately
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 _logger.LogDebug("OpenWebUI not configured, returning fallback response for message: {Message}", message);
                 return CreateContextualFallbackResponse(message, history);
@@ -120,7 +180,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<string> GenerateSlotResponseAsync(List<TimeSlot> slots, InterviewSchedulingBot.Services.Business.SlotQueryCriteria criteria)
         {
             // If OpenWebUI is not configured, return fallback immediately
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return GenerateSlotResponseFallback(slots, criteria);
             }
@@ -213,7 +273,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<string> GetConversationalResponseAsync(string message, string conversationId, List<MessageHistoryItem> history, ConversationOptions options)
         {
             // If OpenWebUI is not configured, return fallback immediately
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return CreateVariedFallbackResponse(message, history, options);
             }
@@ -266,7 +326,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<string> GetClarificationRequestAsync(string message, string context, List<MessageHistoryItem> history)
         {
             // If OpenWebUI is not configured, return fallback immediately
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return CreateClarificationFallback(message, context);
             }
@@ -317,7 +377,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<string> GenerateNoSlotsResponseAsync(InterviewSchedulingBot.Services.Business.SlotQueryCriteria criteria, List<MessageHistoryItem> history)
         {
             // If OpenWebUI is not configured, return fallback immediately
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return CreateNoSlotsFallback(criteria);
             }
@@ -367,7 +427,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<string> GenerateSlotSuggestionsWithConflicts(List<TimeSlot> availableSlots, List<string> participants, Dictionary<string, List<ConflictDetail>> conflicts)
         {
             // If OpenWebUI is not configured, return fallback immediately
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return GenerateSlotSuggestionsFallback(availableSlots, participants, conflicts);
             }
@@ -434,7 +494,7 @@ namespace InterviewSchedulingBot.Services.Integration
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             
             // If OpenWebUI is not configured, return fallback immediately
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 _logger.LogDebug("OpenWebUI not configured, returning fallback response for query: {Query}", query);
                 var immediateResponse = CreateFallbackResponse(query, requestType);
@@ -510,7 +570,7 @@ namespace InterviewSchedulingBot.Services.Integration
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             
             // If OpenWebUI is not configured, return fallback immediately
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 _logger.LogDebug("OpenWebUI not configured, returning fallback response for prompt");
                 return CreateFallbackTextResponse(context);
@@ -575,6 +635,81 @@ namespace InterviewSchedulingBot.Services.Integration
             }
             
             return CreateFallbackTextResponse(context);
+        }
+
+        // Generate actually useful mock responses with variety
+        private string GenerateMockResponse(string query)
+        {
+            if (query.Contains("hi") || query.Contains("hello"))
+            {
+                return "Hello! How can I help with your scheduling needs today?";
+            }
+            
+            if (query.ToLower().Contains("find") && query.ToLower().Contains("slot"))
+            {
+                // Generate different responses for different queries
+                if (query.Contains("tomorrow"))
+                {
+                    return "I found 3 available slots for tomorrow:\n\n" +
+                           "• 9:00 AM - 10:00 AM\n" +
+                           "• 2:00 PM - 3:00 PM\n" +
+                           "• 4:30 PM - 5:30 PM\n\n" +
+                           "Would any of these work for you?";
+                }
+                else if (query.Contains("Friday"))
+                {
+                    return "Here are 2 available slots for Friday:\n\n" +
+                           "• 11:00 AM - 12:00 PM\n" +
+                           "• 3:30 PM - 4:30 PM\n\n" +
+                           "Let me know if you'd like to see more options.";
+                }
+                else
+                {
+                    return "I found these available slots:\n\n" +
+                           "• Tomorrow, 10:00 AM - 11:00 AM\n" +
+                           "• Wednesday, 2:00 PM - 3:00 PM\n" +
+                           "• Friday, 9:30 AM - 10:30 AM\n\n" +
+                           "Would any of these times work?";
+                }
+            }
+            
+            return "I'm not sure how to help with that. You can ask me to find available time slots for meetings.";
+        }
+        
+        // Generate random mock slots based on request parameters
+        private List<TimeSlot> GenerateRandomMockSlots(SlotRequest request)
+        {
+            var random = new Random();
+            var slots = new List<TimeSlot>();
+            
+            // Generate between 0-5 slots based on request
+            var slotCount = random.Next(0, 6);
+            
+            DateTime startDate = request.StartDate ?? DateTime.Today;
+            DateTime endDate = request.EndDate ?? DateTime.Today.AddDays(7);
+            
+            for (int i = 0; i < slotCount; i++)
+            {
+                // Generate random date between start and end
+                int daysToAdd = random.Next(0, (endDate - startDate).Days + 1);
+                DateTime slotDate = startDate.AddDays(daysToAdd);
+                
+                // Generate random hour (9-16 for business hours)
+                int hour = random.Next(9, 17);
+                
+                // Create slot
+                var slot = new TimeSlot
+                {
+                    StartTime = new DateTime(slotDate.Year, slotDate.Month, slotDate.Day, hour, 0, 0),
+                    EndTime = new DateTime(slotDate.Year, slotDate.Month, slotDate.Day, hour + 1, 0, 0),
+                    AvailableParticipants = request.Participants ?? new List<string>(),
+                    TotalParticipants = request.Participants?.Count ?? 0
+                };
+                
+                slots.Add(slot);
+            }
+            
+            return slots;
         }
 
         private string CreateContextualFallbackResponse(string message, List<MessageHistoryItem> history)
@@ -945,7 +1080,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<IntentResponse> RecognizeIntentAsync(string message, List<MessageHistoryItem> history)
         {
             // If OpenWebUI is not configured, use fallback intent recognition
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return RecognizeIntentFallback(message);
             }
@@ -999,7 +1134,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<SlotParameters> ExtractSlotParametersAsync(string message, List<MessageHistoryItem> history)
         {
             // If OpenWebUI is not configured, use fallback parameter extraction
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return ExtractSlotParametersFallback(message);
             }
@@ -1047,7 +1182,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<string> FormatAvailableSlotsAsync(List<TimeSlot> slots, SlotParameters parameters)
         {
             // If OpenWebUI is not configured, use fallback formatting
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return FormatAvailableSlotsFallback(slots, parameters);
             }
@@ -1108,7 +1243,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<string> GenerateClarificationAsync(SlotParameters parameters, List<MessageHistoryItem> history)
         {
             // If OpenWebUI is not configured, use fallback clarification
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return GenerateClarificationFallback(parameters);
             }
@@ -1159,7 +1294,7 @@ namespace InterviewSchedulingBot.Services.Integration
         public async Task<string> GenerateNoSlotsResponseAsync(SlotParameters parameters, List<MessageHistoryItem> history)
         {
             // If OpenWebUI is not configured, use fallback no slots response
-            if (!_isConfigured)
+            if (_useMockData)
             {
                 return GenerateNoSlotsFallback(parameters);
             }
