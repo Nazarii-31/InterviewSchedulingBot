@@ -119,221 +119,34 @@ namespace InterviewBot.Bot
             // Show typing indicator
             await turnContext.SendActivityAsync(new Activity { Type = ActivityTypes.Typing }, cancellationToken);
             
-            // Use enhanced parameter extraction
-            var parameterResponse = await _openWebUIClient.ExtractParametersAsAssistantAsync(userMessage ?? "");
+            // Check if this is a slot finding request
+            if (IsSlotFindingRequest(userMessage))
+            {
+                _logger.LogInformation("Detected slot finding request");
+                await HandleSlotFindingRequestAsync(turnContext, userMessage, conversationId, cancellationToken);
+                return;
+            }
             
-            // Add user message to history
+            // For all other messages, get a response from OpenWebUI
+            var response = await _openWebUIClient.GetResponseAsync(userMessage, conversationId);
+            
+            // Add to conversation history
             await _stateManager.AddToHistoryAsync(
                 conversationId, 
-                new MessageRecord { Text = userMessage ?? "", IsFromBot = false, Timestamp = DateTime.UtcNow });
-            
-            string response;
-            
-            if (parameterResponse.IsSlotRequest && parameterResponse.Parameters != null)
-            {
-                _logger.LogInformation("Detected slot finding request with parameters");
-                response = await HandleSlotFindingWithParametersAsync(parameterResponse.Parameters, cancellationToken);
-            }
-            else
-            {
-                // Handle non-slot requests with the message from parameter extraction or get general response
-                if (!string.IsNullOrEmpty(parameterResponse.Message))
-                {
-                    // Use the message from parameter extraction for better context
-                    if (parameterResponse.Message.Contains("greeting"))
-                    {
-                        response = "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots and check calendar availability using natural language. What would you like me to help you with today?";
-                    }
-                    else if (parameterResponse.Message.Contains("help"))
-                    {
-                        response = "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots using natural language\n• Check calendar availability for multiple participants\n• Analyze scheduling conflicts\n• Suggest optimal meeting times\n\nJust ask me in plain English what you need!";
-                    }
-                    else if (parameterResponse.Message.Contains("thank"))
-                    {
-                        response = "You're welcome! I'm here to help with your scheduling needs. Is there anything else you'd like me to assist you with?";
-                    }
-                    else
-                    {
-                        response = "I'm here to help with finding available time slots! You can ask me to check availability, find open times, or analyze schedules using natural language. How can I assist you today?";
-                    }
-                }
-                else
-                {
-                    // Fallback to OpenWebUI general response
-                    response = await _openWebUIClient.GetResponseAsync(userMessage ?? "", conversationId);
-                }
-            }
-            
-            // Add bot response to history
+                new MessageRecord { Text = userMessage, IsFromBot = false, Timestamp = DateTime.UtcNow });
+                
             await _stateManager.AddToHistoryAsync(
                 conversationId,
                 new MessageRecord { Text = response, IsFromBot = true, Timestamp = DateTime.UtcNow });
             
             await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
         }
-        private async Task<string> HandleSlotFindingWithParametersAsync(
-            ParameterExtractionData parameters,
-            CancellationToken cancellationToken)
+        private bool IsSlotFindingRequest(string message)
         {
-            try
-            {
-                _logger.LogInformation(
-                    "Processing slot request with parameters: Duration={Duration}, TimeRange.Type={TimeRangeType}, TimeOfDay={TimeOfDay}",
-                    parameters.Duration,
-                    parameters.TimeRange?.Type,
-                    parameters.TimeRange?.TimeOfDay);
-                
-                // Convert parameters to scheduling service parameters
-                var (participantIds, startDate, endDate, durationMinutes) = ConvertParametersToSchedulingRequest(parameters);
-                
-                // Use the scheduling service to find optimal slots
-                var rankedSlots = await _schedulingService.FindOptimalSlotsAsync(
-                    participantIds,
-                    startDate,
-                    endDate,
-                    durationMinutes,
-                    10); // Max 10 results
-                
-                if (rankedSlots.Any())
-                {
-                    return FormatSchedulingResponse(rankedSlots, parameters);
-                }
-                else
-                {
-                    return GenerateNoSlotsResponse(parameters);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling slot request with parameters");
-                return $"❌ Error finding available slots: {ex.Message}";
-            }
-        }
-
-        private (List<string> participantIds, DateTime startDate, DateTime endDate, int durationMinutes) ConvertParametersToSchedulingRequest(ParameterExtractionData parameters)
-        {
-            var participantIds = parameters.Participants ?? new List<string>();
-            var durationMinutes = parameters.Duration;
-            
-            // Convert time range
-            var today = DateTime.Today;
-            DateTime startDate;
-            DateTime endDate;
-            
-            if (parameters.TimeRange != null)
-            {
-                switch (parameters.TimeRange.Type?.ToLower())
-                {
-                    case "specific_day":
-                        if (DateTime.TryParse(parameters.TimeRange.StartDate, out var specificDay))
-                        {
-                            startDate = specificDay;
-                            endDate = specificDay.AddDays(1);
-                        }
-                        else
-                        {
-                            startDate = today;
-                            endDate = today.AddDays(1);
-                        }
-                        break;
-                        
-                    case "this_week":
-                        startDate = today;
-                        var daysUntilSunday = 7 - (int)today.DayOfWeek;
-                        endDate = today.AddDays(daysUntilSunday);
-                        break;
-                        
-                    case "next_week":
-                        var daysUntilNextMonday = 7 - (int)today.DayOfWeek + 1;
-                        if (today.DayOfWeek == DayOfWeek.Sunday) daysUntilNextMonday = 1;
-                        
-                        var nextMonday = today.AddDays(daysUntilNextMonday);
-                        startDate = nextMonday;
-                        endDate = nextMonday.AddDays(6);
-                        break;
-                        
-                    case "date_range":
-                        if (DateTime.TryParse(parameters.TimeRange.StartDate, out var rangeStart) &&
-                            DateTime.TryParse(parameters.TimeRange.EndDate, out var rangeEnd))
-                        {
-                            startDate = rangeStart;
-                            endDate = rangeEnd;
-                        }
-                        else
-                        {
-                            startDate = today;
-                            endDate = today.AddDays(7);
-                        }
-                        break;
-                        
-                    default:
-                        startDate = today;
-                        endDate = today.AddDays(7);
-                        break;
-                }
-            }
-            else
-            {
-                // Default to next 7 days
-                startDate = today;
-                endDate = today.AddDays(7);
-            }
-            
-            return (participantIds, startDate, endDate, durationMinutes);
-        }
-
-        private string FormatSchedulingResponse(
-            List<InterviewBot.Domain.Entities.RankedTimeSlot> rankedSlots, 
-            ParameterExtractionData parameters)
-        {
-            if (!rankedSlots.Any())
-            {
-                return "I couldn't find any available slots that match your criteria.";
-            }
-
-            var response = $"✨ Great! I found {rankedSlots.Count} available time slot{(rankedSlots.Count > 1 ? "s" : "")} for you:\n\n";
-            
-            // Group slots by day
-            var slotsByDay = rankedSlots.GroupBy(s => s.StartTime.Date).OrderBy(g => g.Key);
-            
-            foreach (var dayGroup in slotsByDay.Take(3)) // Limit to 3 days
-            {
-                response += $"**{dayGroup.Key:dddd, MMMM d}:**\n";
-                
-                foreach (var slot in dayGroup.Take(3)) // Limit to 3 slots per day
-                {
-                    response += $"• {slot.StartTime:h:mm tt} - {slot.EndTime:h:mm tt}";
-                    response += $" ({parameters.Duration} minutes)";
-                    if (slot.TotalParticipants > 0)
-                    {
-                        response += $" - {slot.AvailableParticipants}/{slot.TotalParticipants} participants available";
-                    }
-                    response += "\n";
-                }
-                
-                response += "\n";
-            }
-
-            if (rankedSlots.Count > 9) // If we have more than 3 days × 3 slots
-            {
-                response += $"...and {rankedSlots.Count - 9} more available slots.\n\n";
-            }
-
-            response += "Would you like me to check other time options or show you different availability?";
-            return response;
-        }
-
-        private string GenerateNoSlotsResponse(ParameterExtractionData parameters)
-        {
-            var timeFrame = parameters.TimeRange?.Type ?? "the requested time";
-            var duration = parameters.Duration.ToString();
-            
-            return $"I couldn't find any available slots during {timeFrame} for {duration} minutes. Here are some suggestions:\n\n" +
-                   "• Try a different time range\n" +
-                   "• Consider fewer participants\n" +
-                   "• Look at alternative days\n" +
-                   "• Split into multiple shorter meetings\n\n" +
-                   "Would you like me to search with different criteria?";
+            message = message.ToLower();
+            return (message.Contains("find") && (message.Contains("slot") || message.Contains("time"))) ||
+                   (message.Contains("schedule") && message.Contains("meeting")) ||
+                   (message.Contains("available") && (message.Contains("time") || message.Contains("slot")));
         }
         
         private async Task HandleSlotFindingRequestAsync(
@@ -678,85 +491,6 @@ namespace InterviewBot.Bot
         }
         
         
-        private async Task ProcessSlotFindingAsync(
-            ITurnContext turnContext,
-            SlotParameters parameters,
-            List<InterviewSchedulingBot.Models.MessageHistoryItem> history,
-            CancellationToken cancellationToken)
-        {
-            try
-            {
-                // If we don't have enough parameters, ask for missing info
-                if (!parameters.HasMinimumRequiredInfo())
-                {
-                    var clarificationResponse = await _openWebUIClient.GenerateClarificationAsync(parameters, history);
-                    await turnContext.SendActivityAsync(MessageFactory.Text(clarificationResponse), cancellationToken);
-                    
-                    // Add bot response to history
-                    history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = clarificationResponse, IsFromBot = true, Timestamp = DateTime.UtcNow });
-                    return;
-                }
-                
-                // Prepare parameters for slot finding
-                var participantIds = parameters.Participants ?? new List<string>();
-                var startDate = parameters.StartDate ?? DateTime.Today;
-                var endDate = parameters.EndDate ?? startDate.AddDays(14);
-                var durationMinutes = parameters.DurationMinutes ?? 60;
-                
-                // If specific day is mentioned, adjust the date range
-                if (!string.IsNullOrEmpty(parameters.SpecificDay) && !parameters.StartDate.HasValue)
-                {
-                    var dayOfWeek = Enum.Parse<DayOfWeek>(parameters.SpecificDay, true);
-                    startDate = GetNextWeekday(DateTime.Today, dayOfWeek);
-                    endDate = startDate.AddDays(1);
-                }
-                
-                // Use the scheduling service to find optimal slots
-                var rankedSlots = await _schedulingService.FindOptimalSlotsAsync(
-                    participantIds,
-                    startDate,
-                    endDate,
-                    durationMinutes,
-                    10); // Max 10 results
-                    
-                string slotResponse;
-                if (rankedSlots.Any())
-                {
-                    // Convert RankedTimeSlot to TimeSlot for formatting
-                    var timeSlots = rankedSlots.Select(rs => new InterviewSchedulingBot.Models.TimeSlot
-                    {
-                        StartTime = rs.StartTime,
-                        EndTime = rs.EndTime,
-                        AvailabilityScore = rs.Score,
-                        AvailableParticipants = new List<string>(), // Would need participant names
-                        TotalParticipants = rs.TotalParticipants
-                    }).ToList();
-                    
-                    // Generate formatted response with actual slots using OpenWebUI
-                    slotResponse = await _openWebUIClient.FormatAvailableSlotsAsync(timeSlots, parameters);
-                }
-                else
-                {
-                    // Generate no slots response
-                    slotResponse = await _openWebUIClient.GenerateNoSlotsResponseAsync(parameters, history);
-                }
-                
-                await turnContext.SendActivityAsync(MessageFactory.Text(slotResponse), cancellationToken);
-                
-                // Add bot response to history
-                history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = slotResponse, IsFromBot = true, Timestamp = DateTime.UtcNow });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error finding slots");
-                var errorMessage = "I encountered an issue while finding available slots. Please try again with more specific details.";
-                await turnContext.SendActivityAsync(MessageFactory.Text(errorMessage), cancellationToken);
-                
-                // Add bot response to history
-                history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = errorMessage, IsFromBot = true, Timestamp = DateTime.UtcNow });
-            }
-        }
-
         private static DateTime GetNextWeekday(DateTime start, DayOfWeek day)
         {
             // Calculate days to add to get to the next occurrence of the specified day
