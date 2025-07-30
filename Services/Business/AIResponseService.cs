@@ -53,7 +53,7 @@ namespace InterviewSchedulingBot.Services.Business
         Task<string> GenerateResponseAsync(AIResponseRequest request, CancellationToken cancellationToken = default);
         Task<ParsedQueryResult> ParseUserQueryAsync(string query, ConversationContext context, CancellationToken cancellationToken = default);
         Task<string> GenerateSlotSuggestionsAsync(List<AvailableSlot> slots, SlotQueryCriteria criteria, CancellationToken cancellationToken = default);
-        Task<string> GenerateConflictExplanationAsync(List<string> participants, Dictionary<string, List<TimeSlot>> availability, SlotQueryCriteria criteria, CancellationToken cancellationToken = default);
+        Task<string> GenerateConflictExplanationAsync(List<string> participants, Dictionary<string, List<InterviewBot.Domain.Entities.TimeSlot>> availability, SlotQueryCriteria criteria, CancellationToken cancellationToken = default);
         Task<string> GenerateWelcomeMessageAsync(string userName, CancellationToken cancellationToken = default);
         Task<string> GenerateErrorMessageAsync(string errorType, string contextInfo, CancellationToken cancellationToken = default);
         Task<string> GenerateFollowUpQuestionAsync(string currentContext, List<string> suggestedActions, CancellationToken cancellationToken = default);
@@ -195,7 +195,7 @@ namespace InterviewSchedulingBot.Services.Business
             return await GenerateResponseAsync(request, cancellationToken);
         }
 
-        public async Task<string> GenerateConflictExplanationAsync(List<string> participants, Dictionary<string, List<TimeSlot>> availability, SlotQueryCriteria criteria, CancellationToken cancellationToken = default)
+        public async Task<string> GenerateConflictExplanationAsync(List<string> participants, Dictionary<string, List<InterviewBot.Domain.Entities.TimeSlot>> availability, SlotQueryCriteria criteria, CancellationToken cancellationToken = default)
         {
             var request = new AIResponseRequest
             {

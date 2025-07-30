@@ -11,6 +11,8 @@ using InterviewSchedulingBot.Interfaces.Business;
 using InterviewSchedulingBot.Interfaces.Integration;
 using InterviewSchedulingBot.Interfaces;
 using InterviewSchedulingBot.Services.Business;
+using InterviewSchedulingBot.Services.Integration;
+using InterviewSchedulingBot.Models;
 
 namespace InterviewBot.Bot
 {
@@ -28,6 +30,8 @@ namespace InterviewBot.Bot
         private readonly ILogger<InterviewSchedulingBotEnhanced> _logger;
         private readonly IAIResponseService _aiResponseService;
         private readonly InterviewBot.Domain.Interfaces.ISchedulingService _schedulingService;
+        private readonly IOpenWebUIClient _openWebUIClient;
+        private readonly IConversationStore _conversationStore;
 
         public InterviewSchedulingBotEnhanced(
             IAuthenticationService authService, 
@@ -41,7 +45,9 @@ namespace InterviewBot.Bot
             ILogger<InterviewSchedulingBotEnhanced> logger,
             ILoggerFactory loggerFactory,
             IAIResponseService aiResponseService,
-            InterviewBot.Domain.Interfaces.ISchedulingService schedulingService)
+            InterviewBot.Domain.Interfaces.ISchedulingService schedulingService,
+            IOpenWebUIClient openWebUIClient,
+            IConversationStore conversationStore)
         {
             _authService = authService;
             _schedulingBusinessService = schedulingBusinessService;
@@ -54,6 +60,8 @@ namespace InterviewBot.Bot
             _logger = logger;
             _aiResponseService = aiResponseService;
             _schedulingService = schedulingService;
+            _openWebUIClient = openWebUIClient;
+            _conversationStore = conversationStore;
             
             // Setup dialogs with specific loggers
             _dialogs = new DialogSet(_accessors.DialogStateAccessor);
@@ -101,20 +109,50 @@ namespace InterviewBot.Bot
                 return;
             }
             
+            var userId = turnContext.Activity.From.Id;
+            var conversationId = turnContext.Activity.Conversation.Id;
+            var message = turnContext.Activity.Text?.Trim();
+            
+            // Get conversation history
+            var history = await _conversationStore.GetHistoryAsync(userId, conversationId);
+            
+            // Add current message to history
+            history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = message, IsFromBot = false, Timestamp = DateTime.UtcNow });
+            
             // Update user activity
             var userProfile = await _accessors.UserProfileAccessor.GetAsync(
                 turnContext, () => new UserProfile(), cancellationToken);
             userProfile.LastActivity = DateTime.UtcNow;
             
-            // Create dialog context
-            var dialogContext = await _dialogs.CreateContextAsync(turnContext, cancellationToken);
-            var results = await dialogContext.ContinueDialogAsync(cancellationToken);
-            
-            // If no active dialog, analyze message and route to appropriate dialog
-            if (results.Status == DialogTurnStatus.Empty)
+            // Check for authentication first
+            var isAuthenticated = await _authService.IsUserAuthenticatedAsync(userId);
+            if (!isAuthenticated)
             {
-                await RouteMessageAsync(dialogContext, turnContext, cancellationToken);
+                await HandleAuthenticationAsync(turnContext, cancellationToken);
+                return;
             }
+            
+            // Check if message contains specific scheduling commands
+            if (ContainsSchedulingCommand(message))
+            {
+                // Handle specific scheduling functionality using dialogs
+                await ProcessSchedulingCommandAsync(turnContext, message, cancellationToken);
+            }
+            else 
+            {
+                // For ALL other messages, send directly to OpenWebUI
+                await turnContext.SendActivityAsync(new Activity { Type = ActivityTypes.Typing }, cancellationToken);
+                
+                var response = await _openWebUIClient.GetDirectResponseAsync(message, conversationId, history);
+                
+                await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+                
+                // Add bot response to history
+                history.Add(new InterviewSchedulingBot.Models.MessageHistoryItem { Message = response, IsFromBot = true, Timestamp = DateTime.UtcNow });
+            }
+            
+            // Save updated history
+            await _conversationStore.SaveHistoryAsync(userId, conversationId, history);
             
             // Save state
             await _conversationState.SaveChangesAsync(turnContext, false, cancellationToken);
@@ -331,143 +369,50 @@ namespace InterviewBot.Bot
             await dialogContext.BeginDialogAsync(nameof(ViewInterviewsDialog), null, cancellationToken);
         }
         
-        private async Task RouteMessageAsync(
-            DialogContext dialogContext, 
-            ITurnContext turnContext, 
-            CancellationToken cancellationToken)
+        
+        private bool ContainsSchedulingCommand(string message)
         {
-            var messageText = turnContext.Activity.Text?.ToLowerInvariant() ?? string.Empty;
+            if (string.IsNullOrEmpty(message)) return false;
             
-            // Remove bot mentions if present
-            messageText = RemoveBotMentions(messageText, turnContext);
-            
-            // Route based on intent - check for specific commands first
-            if (IsSchedulingIntent(messageText))
-            {
-                await dialogContext.BeginDialogAsync(nameof(ScheduleInterviewDialog), null, cancellationToken);
-            }
-            else if (IsViewingIntent(messageText))
-            {
-                await dialogContext.BeginDialogAsync(nameof(ViewInterviewsDialog), null, cancellationToken);
-            }
-            else if (IsSlotFindingIntent(messageText))
-            {
-                // Handle natural language slot finding queries
-                await dialogContext.BeginDialogAsync(nameof(FindSlotsDialog), turnContext.Activity.Text, cancellationToken);
-            }
-            else if (IsHelpIntent(messageText))
-            {
-                await ShowHelpMessageAsync(turnContext, cancellationToken);
-            }
-            else if (IsGreetingIntent(messageText))
-            {
-                await ShowGreetingMessageAsync(turnContext, cancellationToken);
-            }
-            else if (ContainsTimeOrDayReference(messageText))
-            {
-                // Check if this might be a natural language query by looking for time/day references
-                _logger.LogInformation("Detected potential slot query: {Message}", messageText);
-                await dialogContext.BeginDialogAsync(nameof(FindSlotsDialog), turnContext.Activity.Text, cancellationToken);
-            }
-            else
-            {
-                // For ANY other message, use AI response service instead of showing unknown intent
-                _logger.LogInformation("Processing general message with AI: {Message}", messageText);
-                await HandleGeneralMessageWithAIAsync(turnContext, cancellationToken);
-            }
+            var lowerMessage = message.ToLowerInvariant();
+            var schedulingKeywords = new[] { "schedule", "book", "find slots", "create interview", "plan meeting", "set up meeting" };
+            return schedulingKeywords.Any(keyword => lowerMessage.Contains(keyword));
         }
         
-        private async Task HandleGeneralMessageWithAIAsync(ITurnContext turnContext, CancellationToken cancellationToken)
+        private async Task HandleAuthenticationAsync(ITurnContext turnContext, CancellationToken cancellationToken)
         {
-            try
+            var authMessage = "I need to authenticate you before we can proceed with scheduling. Please log in to continue.";
+            await turnContext.SendActivityAsync(MessageFactory.Text(authMessage), cancellationToken);
+            
+            // In a real implementation, this would redirect to authentication flow
+            _logger.LogInformation("User authentication required for: {UserId}", turnContext.Activity.From.Id);
+        }
+        
+        private async Task ProcessSchedulingCommandAsync(ITurnContext<IMessageActivity> turnContext, string message, CancellationToken cancellationToken)
+        {
+            // Create dialog context for scheduling operations
+            var dialogContext = await _dialogs.CreateContextAsync(turnContext, cancellationToken);
+            var results = await dialogContext.ContinueDialogAsync(cancellationToken);
+            
+            // If no active dialog, start appropriate scheduling dialog
+            if (results.Status == DialogTurnStatus.Empty)
             {
-                // Get conversation context
-                var userProfile = await _accessors.UserProfileAccessor.GetAsync(
-                    turnContext, () => new UserProfile(), cancellationToken);
+                var lowerMessage = message.ToLowerInvariant();
                 
-                // Create context for AI response
-                var conversationContext = new InterviewSchedulingBot.Services.Business.ConversationContext
+                if (lowerMessage.Contains("find slots") || lowerMessage.Contains("available"))
                 {
-                    PreviousMessages = userProfile.ConversationHistory?.TakeLast(5).ToList() ?? new List<string>(),
-                    CurrentIntent = "general_conversation"
-                };
-                
-                // Generate AI response for the general message
-                var response = await _aiResponseService.GenerateResponseAsync(
-                    new AIResponseRequest
-                    {
-                        ResponseType = "general_response",
-                        UserQuery = turnContext.Activity.Text ?? "",
-                        Context = new { 
-                            UserName = turnContext.Activity.From.Name ?? "there",
-                            ConversationContext = conversationContext,
-                            IsGeneralQuery = true
-                        }
-                    },
-                    cancellationToken);
-                
-                await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
-                
-                // Update conversation history
-                userProfile.ConversationHistory ??= new List<string>();
-                userProfile.ConversationHistory.Add($"User: {turnContext.Activity.Text}");
-                userProfile.ConversationHistory.Add($"Bot: {response}");
-                
-                // Keep only last 10 messages to avoid memory bloat
-                if (userProfile.ConversationHistory.Count > 10)
+                    await dialogContext.BeginDialogAsync(nameof(FindSlotsDialog), message, cancellationToken);
+                }
+                else if (lowerMessage.Contains("schedule") || lowerMessage.Contains("book") || lowerMessage.Contains("create"))
                 {
-                    userProfile.ConversationHistory = userProfile.ConversationHistory.TakeLast(10).ToList();
+                    await dialogContext.BeginDialogAsync(nameof(ScheduleInterviewDialog), null, cancellationToken);
+                }
+                else
+                {
+                    // Default to slot finding for scheduling-related queries
+                    await dialogContext.BeginDialogAsync(nameof(FindSlotsDialog), message, cancellationToken);
                 }
             }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error handling general message with AI");
-                
-                // Fallback to a helpful response
-                var fallbackResponse = "I'm here to help with interview scheduling! You can ask me to find time slots, schedule meetings, or check availability. For example, try 'Find slots tomorrow morning' or 'Schedule an interview next week'.";
-                await turnContext.SendActivityAsync(MessageFactory.Text(fallbackResponse), cancellationToken);
-            }
-        }
-        
-        private bool IsSchedulingIntent(string message)
-        {
-            var schedulingKeywords = new[] { "schedule", "book", "create", "plan", "arrange", "set up", "new interview", "meeting" };
-            return schedulingKeywords.Any(keyword => message.Contains(keyword));
-        }
-        
-        private bool IsViewingIntent(string message)
-        {
-            var viewingKeywords = new[] { "view", "list", "show", "see", "upcoming", "my interviews", "calendar" };
-            return viewingKeywords.Any(keyword => message.Contains(keyword));
-        }
-        
-        private bool IsHelpIntent(string message)
-        {
-            var helpKeywords = new[] { "help", "what can you do", "commands", "options", "how", "?" };
-            return helpKeywords.Any(keyword => message.Contains(keyword));
-        }
-        
-        private bool IsGreetingIntent(string message)
-        {
-            var greetingKeywords = new[] { "hello", "hi", "hey", "good morning", "good afternoon", "good evening", "start" };
-            return greetingKeywords.Any(keyword => message.Contains(keyword));
-        }
-
-        private bool IsSlotFindingIntent(string message)
-        {
-            var slotFindingKeywords = new[] { "find slots", "find time", "availability", "available", "free time", "when can", "show slots" };
-            return slotFindingKeywords.Any(keyword => message.Contains(keyword));
-        }
-
-        private bool ContainsTimeOrDayReference(string message)
-        {
-            var timeReferences = new[] { 
-                "morning", "afternoon", "evening", "today", "tomorrow", "monday", "tuesday", "wednesday", 
-                "thursday", "friday", "saturday", "sunday", "next week", "this week", "next monday",
-                "next tuesday", "next wednesday", "next thursday", "next friday", "am", "pm", 
-                "time", "slot", "minute", "hour"
-            };
-            return timeReferences.Any(keyword => message.Contains(keyword));
         }
         
         private string RemoveBotMentions(string message, ITurnContext turnContext)
@@ -479,38 +424,6 @@ namespace InterviewBot.Bot
                 message = message.Replace($"@{botName.ToLowerInvariant()}", "").Trim();
             }
             return message;
-        }
-        
-        private async Task ShowGreetingMessageAsync(ITurnContext turnContext, CancellationToken cancellationToken)
-        {
-            var greetingMessage = await _aiResponseService.GenerateResponseAsync(
-                new AIResponseRequest
-                {
-                    ResponseType = "greeting_message",
-                    Context = new { UserName = turnContext.Activity.From.Name ?? "there" }
-                },
-                cancellationToken);
-            
-            await turnContext.SendActivityAsync(MessageFactory.Text(greetingMessage), cancellationToken);
-        }
-        
-        private async Task ShowHelpMessageAsync(ITurnContext turnContext, CancellationToken cancellationToken)
-        {
-            var helpMessage = await _aiResponseService.GenerateHelpMessageAsync(
-                "general_help", 
-                cancellationToken);
-            
-            await turnContext.SendActivityAsync(MessageFactory.Text(helpMessage), cancellationToken);
-        }
-        
-        private async Task ShowUnknownIntentMessageAsync(ITurnContext turnContext, CancellationToken cancellationToken)
-        {
-            var unknownMessage = await _aiResponseService.GenerateErrorMessageAsync(
-                "unknown_intent", 
-                "User message unclear", 
-                cancellationToken);
-            
-            await turnContext.SendActivityAsync(MessageFactory.Text(unknownMessage), cancellationToken);
         }
         
         protected override async Task OnEventActivityAsync(

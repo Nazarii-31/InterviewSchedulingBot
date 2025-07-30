@@ -8,6 +8,8 @@ namespace InterviewSchedulingBot.Services.Integration
     {
         Task<OpenWebUIResponse> ProcessQueryAsync(string query, OpenWebUIRequestType requestType, CancellationToken cancellationToken = default);
         Task<string> GenerateResponseAsync(string prompt, object context, CancellationToken cancellationToken = default);
+        Task<string> GetDirectResponseAsync(string message, string conversationId, List<MessageHistoryItem> history);
+        Task<string> GenerateSlotSuggestionsWithConflicts(List<TimeSlot> availableSlots, List<string> participants, Dictionary<string, List<ConflictDetail>> conflicts);
     }
 
     public class OpenWebUIClient : IOpenWebUIClient
@@ -41,6 +43,132 @@ namespace InterviewSchedulingBot.Services.Integration
             {
                 _logger.LogInformation("OpenWebUI not configured, using fallback responses");
             }
+        }
+
+        public async Task<string> GetDirectResponseAsync(string message, string conversationId, List<MessageHistoryItem> history)
+        {
+            // If OpenWebUI is not configured, return fallback immediately
+            if (!_isConfigured)
+            {
+                _logger.LogDebug("OpenWebUI not configured, returning fallback response for message: {Message}", message);
+                return CreateContextualFallbackResponse(message, history);
+            }
+
+            try
+            {
+                var request = new
+                {
+                    message = message,
+                    conversation_id = conversationId,
+                    history = history.Select(h => new { role = h.IsFromBot ? "assistant" : "user", content = h.Message }).ToArray(),
+                    max_tokens = _configuration.GetValue<int>("OpenWebUI:MaxTokens", 1000)
+                };
+
+                var content = new StringContent(
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+                
+                var response = await _httpClient.PostAsync("chat", content, cts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+
+                    if (responseObj.TryGetProperty("response", out var responseElement))
+                    {
+                        var result = responseElement.GetString();
+                        if (!string.IsNullOrEmpty(result))
+                        {
+                            _logger.LogInformation("Received direct response from OpenWebUI");
+                            return result;
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("OpenWebUI API returned error: {StatusCode}", response.StatusCode);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("OpenWebUI request timed out");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting direct response from OpenWebUI");
+            }
+
+            return CreateContextualFallbackResponse(message, history);
+        }
+
+        public async Task<string> GenerateSlotSuggestionsWithConflicts(List<TimeSlot> availableSlots, List<string> participants, Dictionary<string, List<ConflictDetail>> conflicts)
+        {
+            // If OpenWebUI is not configured, return fallback immediately
+            if (!_isConfigured)
+            {
+                return GenerateSlotSuggestionsFallback(availableSlots, participants, conflicts);
+            }
+
+            try
+            {
+                var request = new
+                {
+                    slots = availableSlots.Select(s => new {
+                        date = s.StartTime.ToString("yyyy-MM-dd"),
+                        start = s.StartTime.ToString("HH:mm"),
+                        end = s.EndTime.ToString("HH:mm"),
+                        availability_score = s.AvailabilityScore
+                    }).ToList(),
+                    participants = participants,
+                    conflicts = conflicts.Select(c => new {
+                        participant = c.Key,
+                        busy_times = c.Value.Select(v => new {
+                            start = v.StartTime.ToString("yyyy-MM-dd HH:mm"),
+                            end = v.EndTime.ToString("yyyy-MM-dd HH:mm"),
+                            title = v.Title
+                        }).ToList()
+                    }).ToList(),
+                    task = "Generate a conversational response explaining available slots and conflicts"
+                };
+
+                var content = new StringContent(
+                    JsonSerializer.Serialize(request, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }),
+                    Encoding.UTF8,
+                    "application/json");
+
+                var timeoutMs = _configuration.GetValue<int>("OpenWebUI:Timeout", 30000);
+                using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(timeoutMs));
+
+                var response = await _httpClient.PostAsync("generate", content, cts.Token);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+                    
+                    if (responseObj.TryGetProperty("text", out var textElement))
+                    {
+                        var result = textElement.GetString();
+                        if (!string.IsNullOrEmpty(result))
+                        {
+                            return result;
+                        }
+                    }
+                }
+
+                _logger.LogWarning("OpenWebUI API generate returned error: {StatusCode}", response.StatusCode);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating slot suggestions with OpenWebUI");
+            }
+
+            return GenerateSlotSuggestionsFallback(availableSlots, participants, conflicts);
         }
         
         public async Task<OpenWebUIResponse> ProcessQueryAsync(string query, OpenWebUIRequestType requestType, CancellationToken cancellationToken = default)
@@ -189,6 +317,78 @@ namespace InterviewSchedulingBot.Services.Integration
             }
             
             return CreateFallbackTextResponse(context);
+        }
+
+        private string CreateContextualFallbackResponse(string message, List<MessageHistoryItem> history)
+        {
+            var lowerMessage = message.ToLowerInvariant();
+
+            // Analyze message content for better contextual responses
+            if (lowerMessage.Contains("hello") || lowerMessage.Contains("hi") || lowerMessage.Contains("hey"))
+            {
+                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots, schedule meetings, and manage your calendar using natural language. What would you like me to help you with today?";
+            }
+
+            if (lowerMessage.Contains("help") || lowerMessage.Contains("what can you do"))
+            {
+                return "I can help you with interview scheduling! Here's what I can do:\n\n• Find available time slots using natural language\n• Schedule interviews and meetings\n• Check calendar availability\n• Answer questions about scheduling\n\nJust ask me in plain English what you need!";
+            }
+
+            if (lowerMessage.Contains("slots") || lowerMessage.Contains("available") || lowerMessage.Contains("time") || lowerMessage.Contains("schedule"))
+            {
+                return "I'd be happy to help you find available time slots! Could you please tell me more details like:\n\n• When would you like to schedule the meeting?\n• How long should the meeting be?\n• Who should be included?\n\nFor example, you could say 'Find slots tomorrow morning' or 'Schedule a 1-hour meeting next week'.";
+            }
+
+            if (lowerMessage.Contains("thank") || lowerMessage.Contains("thanks"))
+            {
+                return "You're welcome! I'm here to help with your scheduling needs. Is there anything else you'd like me to assist you with?";
+            }
+
+            // Check conversation context for better responses
+            if (history.Count > 0)
+            {
+                var recentBotMessage = history.LastOrDefault(h => h.IsFromBot)?.Message ?? "";
+                if (recentBotMessage.Contains("slots") || recentBotMessage.Contains("available"))
+                {
+                    return "I understand you're interested in scheduling. Could you provide more specific details about when you'd like to meet, the duration, and who should be included? This will help me find the best available slots for you.";
+                }
+            }
+
+            // Default conversational response
+            return "I'm here to help with interview scheduling! You can ask me to find time slots, schedule meetings, or check availability using natural language. For example, try asking 'Find slots tomorrow afternoon' or 'When can we schedule a meeting next week?' How can I assist you today?";
+        }
+
+        private string GenerateSlotSuggestionsFallback(List<TimeSlot> availableSlots, List<string> participants, Dictionary<string, List<ConflictDetail>> conflicts)
+        {
+            if (!availableSlots.Any())
+            {
+                return "I couldn't find any available slots that work for all participants. You might want to try a different time range or consider having fewer participants.";
+            }
+
+            var response = $"✨ I found {availableSlots.Count} available time slot{(availableSlots.Count > 1 ? "s" : "")} for you!\n\n";
+
+            for (int i = 0; i < Math.Min(3, availableSlots.Count); i++)
+            {
+                var slot = availableSlots[i];
+                response += $"🗓️ **Option {i + 1}:** {slot.StartTime:dddd, MMMM d} from {slot.StartTime:h:mm tt} to {slot.EndTime:h:mm tt}\n";
+                response += $"   👥 {slot.AvailableParticipants.Count} of {slot.TotalParticipants} participants available\n\n";
+            }
+
+            if (conflicts.Any())
+            {
+                response += "⚠️ **Conflicts detected:**\n";
+                foreach (var conflict in conflicts.Take(2))
+                {
+                    response += $"• {conflict.Key} has conflicts during some time periods\n";
+                }
+                if (conflicts.Count > 2)
+                {
+                    response += $"• And {conflicts.Count - 2} other participant{(conflicts.Count - 2 > 1 ? "s" : "")} with conflicts\n";
+                }
+            }
+
+            response += "\nWould you like me to help you schedule one of these slots or show you different options?";
+            return response;
         }
 
         private OpenWebUIResponse CreateFallbackResponse(string query, OpenWebUIRequestType requestType)
