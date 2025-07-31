@@ -73,31 +73,32 @@ namespace InterviewBot.Infrastructure.Scheduling
             InterviewRequirements requirements)
         {
             var rankedSlots = new List<RankedTimeSlot>();
+            var totalParticipants = participantAvailability.Count;
             
-            // Get all unique time points where availability changes
-            var timePoints = new SortedSet<DateTime>();
+            // For each participant's available slots, find potential meeting times
+            var allPotentialSlots = new List<DateTime>();
             
             foreach (var participantSlots in participantAvailability.Values)
             {
                 foreach (var slot in participantSlots)
                 {
-                    timePoints.Add(slot.StartTime);
-                    timePoints.Add(slot.EndTime);
+                    // Generate potential meeting start times within this available slot
+                    var current = slot.StartTime;
+                    while (current.AddMinutes(requirements.DurationMinutes) <= slot.EndTime)
+                    {
+                        allPotentialSlots.Add(current);
+                        current = current.AddMinutes(15); // Check every 15 minutes
+                    }
                 }
             }
             
-            var timePointsList = timePoints.ToList();
-            var totalParticipants = participantAvailability.Count;
+            // Remove duplicates and sort
+            var uniqueSlots = allPotentialSlots.Distinct().OrderBy(s => s).ToList();
             
-            // Check each consecutive pair of time points for potential slots
-            for (int i = 0; i < timePointsList.Count - 1; i++)
+            // Evaluate each potential slot
+            foreach (var start in uniqueSlots)
             {
-                var start = timePointsList[i];
                 var end = start.AddMinutes(requirements.DurationMinutes);
-                
-                // Make sure the slot doesn't exceed the next time point boundary
-                if (i + 1 < timePointsList.Count && end > timePointsList[i + 1])
-                    continue;
                 
                 // Count available participants for this slot and track who they are
                 var availableParticipantIds = new List<string>();
@@ -108,7 +109,9 @@ namespace InterviewBot.Infrastructure.Scheduling
                     var participantId = participantEntry.Key;
                     var participantSlots = participantEntry.Value;
                     
-                    if (participantSlots.Any(slot => slot.StartTime <= start && slot.EndTime >= end))
+                    bool isAvailable = participantSlots.Any(slot => slot.StartTime <= start && slot.EndTime >= end);
+                    
+                    if (isAvailable)
                     {
                         availableParticipantIds.Add(participantId);
                     }
