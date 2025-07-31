@@ -15,7 +15,7 @@ namespace InterviewSchedulingBot.Controllers
         [HttpGet("interface")]
         public IActionResult Index()
         {
-            return Redirect("/api/clean-mock-data/interface");
+            return Redirect("/api/mock-data/interface");
         }
         
         /// <summary>
@@ -91,7 +91,7 @@ namespace InterviewSchedulingBot.Controllers
                 <div class=""card"">
                     <div class=""card-header"">Quick Actions</div>
                     <div class=""card-body"">
-                        <a href=""/api/clean-mock-data/interface"" class=""btn btn-outline-primary w-100 mb-2"">
+                        <a href=""/api/mock-data/interface"" class=""btn btn-outline-primary w-100 mb-2"">
                             Mock Data Management
                         </a>
                         <a href=""/clean/health"" class=""btn btn-outline-success w-100"">
@@ -114,7 +114,7 @@ namespace InterviewSchedulingBot.Controllers
 
             try {
                 // Extract parameters using clean service
-                const response = await fetch('/api/clean-mock-data/extract-parameters', {
+                const response = await fetch('/api/mock-data/extract-parameters', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message })

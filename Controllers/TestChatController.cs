@@ -138,7 +138,7 @@ namespace InterviewSchedulingBot.Controllers
         public IActionResult MockCalendarManagement()
         {
             // Redirect to the new clean mock data interface
-            return Redirect("/api/clean-mock-data/interface");
+            return Redirect("/api/mock-data/interface");
         }
 
         [HttpPost("generate-mock-data")]
