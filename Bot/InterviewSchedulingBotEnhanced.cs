@@ -231,7 +231,15 @@ namespace InterviewBot.Bot
             else if (lowerMessage.Contains("tomorrow"))
                 request.StartDate = DateTime.Today.AddDays(1);
             else if (lowerMessage.Contains("next week"))
-                request.StartDate = DateTime.Today.AddDays(7);
+            {
+                // For "next week", start from Monday of next week and search the full week
+                var today = DateTime.Today;
+                var daysUntilMonday = ((int)DayOfWeek.Monday - (int)today.DayOfWeek + 7) % 7;
+                if (daysUntilMonday == 0) daysUntilMonday = 7; // If today is Monday, get next Monday
+                
+                request.StartDate = today.AddDays(daysUntilMonday);
+                request.EndDate = request.StartDate.Value.AddDays(4); // Monday to Friday
+            }
             
             // Extract duration
             if (lowerMessage.Contains("30 min"))

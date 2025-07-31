@@ -1,5 +1,6 @@
 using InterviewBot.Domain.Entities;
 using InterviewSchedulingBot.Services.Integration;
+using System.Globalization;
 
 namespace InterviewSchedulingBot.Services.Business
 {
@@ -195,20 +196,42 @@ namespace InterviewSchedulingBot.Services.Business
 
             var response = new List<string>();
             var bestSlot = slots.OrderByDescending(s => s.Score).First();
+            var englishCulture = CultureInfo.GetCultureInfo("en-US");
+            
+            // Filter slots based on specific day request if provided
+            if (!string.IsNullOrEmpty(criteria.SpecificDay))
+            {
+                var requestedDayOfWeek = ParseDayOfWeek(criteria.SpecificDay);
+                if (requestedDayOfWeek.HasValue)
+                {
+                    slotsByDay = slotsByDay
+                        .Where(kvp => kvp.Key.DayOfWeek == requestedDayOfWeek.Value)
+                        .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+                    
+                    slots = slotsByDay.SelectMany(kvp => kvp.Value).ToList();
+                    
+                    if (!slots.Any())
+                    {
+                        return $"I couldn't find any available slots on {criteria.SpecificDay}. Would you like me to check other days?";
+                    }
+                }
+            }
             
             response.Add($"🎯 **Great news!** I found {slots.Count} available slot{(slots.Count > 1 ? "s" : "")} for your {criteria.DurationMinutes}-minute meeting.");
             
             if (slotsByDay.Count == 1)
             {
                 var day = slotsByDay.Keys.First();
-                response.Add($"\n📅 **{day.DayOfWeek}, {day:MMM dd}:**");
+                var dayName = day.ToString("dddd", englishCulture);
+                var dateStr = day.ToString("MMM dd", englishCulture);
+                response.Add($"\n📅 **{dayName}, {dateStr}:**");
                 
                 foreach (var slot in slotsByDay[day].OrderBy(s => s.StartTime))
                 {
-                    var availability = slot.TotalParticipants > 0 
-                        ? $" ({slot.AvailableParticipants}/{slot.TotalParticipants} participants available)"
-                        : "";
-                    response.Add($"   • {slot.StartTime:HH:mm} - {slot.EndTime:HH:mm}{availability}");
+                    var startTimeStr = slot.StartTime.ToString("h:mm tt", englishCulture);
+                    var endTimeStr = slot.EndTime.ToString("h:mm tt", englishCulture);
+                    var availabilityInfo = GetAvailabilityInfo(slot);
+                    response.Add($"   • {startTimeStr} - {endTimeStr}{availabilityInfo}");
                 }
             }
             else
@@ -217,23 +240,78 @@ namespace InterviewSchedulingBot.Services.Business
                 
                 foreach (var dayGroup in slotsByDay.OrderBy(kvp => kvp.Key))
                 {
-                    response.Add($"\n**{dayGroup.Key.DayOfWeek}, {dayGroup.Key:MMM dd}:**");
+                    var dayName = dayGroup.Key.ToString("dddd", englishCulture);
+                    var dateStr = dayGroup.Key.ToString("MMM dd", englishCulture);
+                    response.Add($"\n**{dayName}, {dateStr}:**");
                     foreach (var slot in dayGroup.Value.Take(3).OrderBy(s => s.StartTime))
                     {
-                        var availability = slot.TotalParticipants > 0 
-                            ? $" ({slot.AvailableParticipants}/{slot.TotalParticipants} available)"
-                            : "";
-                        response.Add($"   • {slot.StartTime:HH:mm} - {slot.EndTime:HH:mm}{availability}");
+                        var startTimeStr = slot.StartTime.ToString("h:mm tt", englishCulture);
+                        var endTimeStr = slot.EndTime.ToString("h:mm tt", englishCulture);
+                        var availabilityInfo = GetAvailabilityInfo(slot);
+                        response.Add($"   • {startTimeStr} - {endTimeStr}{availabilityInfo}");
                     }
                 }
             }
             
-            response.Add($"\n⭐ **Best recommendation:** {bestSlot.StartTime:ddd, MMM dd} at {bestSlot.StartTime:HH:mm} " +
+            var bestSlotDay = bestSlot.StartTime.ToString("dddd", englishCulture);
+            var bestSlotDate = bestSlot.StartTime.ToString("MMM dd", englishCulture);
+            var bestSlotTime = bestSlot.StartTime.ToString("h:mm tt", englishCulture);
+            response.Add($"\n⭐ **Best recommendation:** {bestSlotDay}, {bestSlotDate} at {bestSlotTime} " +
                         $"(Score: {bestSlot.Score:F0})");
             
             response.Add("\nWould you like me to schedule one of these slots or find different options?");
             
             return string.Join("", response);
+        }
+
+        private string GetAvailabilityInfo(RankedTimeSlot slot)
+        {
+            if (slot.TotalParticipants == 0)
+                return "";
+                
+            if (slot.AvailableParticipants == slot.TotalParticipants)
+            {
+                return " ✅ All participants available";
+            }
+            else if (slot.AvailableParticipants > 0)
+            {
+                var availableInfo = $" ⚠️ {slot.AvailableParticipants}/{slot.TotalParticipants} participants available";
+                
+                if (slot.UnavailableParticipants.Any())
+                {
+                    var conflicts = slot.UnavailableParticipants
+                        .Select(p => $"{p.Email} ({p.ConflictReason})")
+                        .Take(2); // Limit to first 2 to avoid too much text
+                    
+                    availableInfo += $"\n     Unavailable: {string.Join(", ", conflicts)}";
+                    
+                    if (slot.UnavailableParticipants.Count > 2)
+                    {
+                        availableInfo += $" and {slot.UnavailableParticipants.Count - 2} others";
+                    }
+                }
+                
+                return availableInfo;
+            }
+            else
+            {
+                return " ❌ No participants available";
+            }
+        }
+
+        private DayOfWeek? ParseDayOfWeek(string dayName)
+        {
+            return dayName?.ToLowerInvariant() switch
+            {
+                "monday" => DayOfWeek.Monday,
+                "tuesday" => DayOfWeek.Tuesday,
+                "wednesday" => DayOfWeek.Wednesday,
+                "thursday" => DayOfWeek.Thursday,
+                "friday" => DayOfWeek.Friday,
+                "saturday" => DayOfWeek.Saturday,
+                "sunday" => DayOfWeek.Sunday,
+                _ => null
+            };
         }
 
         private string GenerateFallbackConflictResponse(

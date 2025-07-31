@@ -99,15 +99,40 @@ namespace InterviewBot.Infrastructure.Scheduling
                 if (i + 1 < timePointsList.Count && end > timePointsList[i + 1])
                     continue;
                 
-                // Count available participants for this slot
-                var availableParticipants = 0;
-                foreach (var participantSlots in participantAvailability.Values)
+                // Count available participants for this slot and track who they are
+                var availableParticipantIds = new List<string>();
+                var unavailableParticipants = new List<ParticipantConflict>();
+                
+                foreach (var participantEntry in participantAvailability)
                 {
+                    var participantId = participantEntry.Key;
+                    var participantSlots = participantEntry.Value;
+                    
                     if (participantSlots.Any(slot => slot.StartTime <= start && slot.EndTime >= end))
                     {
-                        availableParticipants++;
+                        availableParticipantIds.Add(participantId);
+                    }
+                    else
+                    {
+                        // Find conflicting meetings for this participant
+                        var conflictingSlot = participantSlots
+                            .FirstOrDefault(slot => start < slot.EndTime && end > slot.StartTime);
+                        
+                        var conflictReason = conflictingSlot != null 
+                            ? $"Meeting until {conflictingSlot.EndTime:HH:mm}"
+                            : "Not available";
+                            
+                        unavailableParticipants.Add(new ParticipantConflict
+                        {
+                            Email = participantId,
+                            ConflictReason = conflictReason,
+                            ConflictStartTime = conflictingSlot?.StartTime,
+                            ConflictEndTime = conflictingSlot?.EndTime
+                        });
                     }
                 }
+                
+                var availableParticipants = availableParticipantIds.Count;
                 
                 // Only consider slots where at least half the participants are available
                 if (availableParticipants >= Math.Max(1, totalParticipants / 2))
@@ -120,7 +145,9 @@ namespace InterviewBot.Infrastructure.Scheduling
                         EndTime = end,
                         Score = score,
                         AvailableParticipants = availableParticipants,
-                        TotalParticipants = totalParticipants
+                        TotalParticipants = totalParticipants,
+                        AvailableParticipantEmails = availableParticipantIds,
+                        UnavailableParticipants = unavailableParticipants
                     });
                 }
             }

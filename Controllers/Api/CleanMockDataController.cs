@@ -8,7 +8,7 @@ namespace InterviewSchedulingBot.Controllers.Api
     /// Clean API controller for mock data management with explicit routing
     /// </summary>
     [ApiController]
-    [Route("api/clean-mock-data")]
+    [Route("api/mock-data")]
     public class CleanMockDataController : ControllerBase
     {
         private readonly ICleanMockDataGenerator _mockDataGenerator;
@@ -175,7 +175,7 @@ namespace InterviewSchedulingBot.Controllers.Api
 
         async function exportData() {{
             try {{
-                const response = await fetch('/api/clean-mock-data/export');
+                const response = await fetch('/api/mock-data/export');
                 const data = await response.text();
                 downloadFile('mock-data.json', data);
                 showMessage('Data exported successfully', 'success');
@@ -195,7 +195,7 @@ namespace InterviewSchedulingBot.Controllers.Api
                     options.body = JSON.stringify(data);
                 }}
 
-                const response = await fetch(`/api/clean-mock-data/${{endpoint}}`, options);
+                const response = await fetch(`/api/mock-data/${{endpoint}}`, options);
                 const result = await response.json();
                 
                 if (result.success) {{
