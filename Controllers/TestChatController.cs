@@ -134,6 +134,245 @@ namespace InterviewSchedulingBot.Controllers
             });
         }
 
+        [HttpGet("mock-calendar-management")]
+        public IActionResult MockCalendarManagement()
+        {
+            // Redirect to the new clean mock data interface
+            return Redirect("/api/clean-mock-data/interface");
+        }
+
+        [HttpPost("generate-mock-data")]
+        public IActionResult GenerateMockData([FromBody] MockDataRequest request)
+        {
+            try
+            {
+                var mockCalendarGenerator = HttpContext.RequestServices.GetRequiredService<InterviewSchedulingBot.Services.MockCalendarGenerator>();
+                mockCalendarGenerator.GenerateCalendars(request.NumberOfUsers, request.BusynessLevel);
+                
+                return Ok(new { 
+                    success = true, 
+                    message = $"Successfully generated calendars for {request.NumberOfUsers} users with {request.BusynessLevel:P0} busyness level",
+                    users = mockCalendarGenerator.GetAllUsers() 
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpGet("mock-calendar-data")]
+        public IActionResult MockCalendarData()
+        {
+            return Content(GetMockCalendarDataHtml(), "text/html");
+        }
+
+        private string GetMockCalendarManagementHtml()
+        {
+            return @"
+<!DOCTYPE html>
+<html lang=""en"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Mock Calendar Management</title>
+    <link href=""https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css"" rel=""stylesheet"">
+    <link href=""https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"" rel=""stylesheet"">
+</head>
+<body>
+    <div class=""container mt-4"">
+        <h1 class=""mb-4"">Mock Calendar Management</h1>
+        
+        <div class=""card mb-4"">
+            <div class=""card-header bg-primary text-white"">
+                <h3 class=""mb-0"">Generate Mock Calendar Data</h3>
+            </div>
+            <div class=""card-body"">
+                <form id=""mockDataForm"">
+                    <div class=""row mb-3"">
+                        <div class=""col-md-6"">
+                            <label for=""numberOfUsers"" class=""form-label"">Number of Users</label>
+                            <input type=""range"" class=""form-range"" id=""numberOfUsers"" min=""1"" max=""5"" value=""5"" oninput=""updateNumberOfUsersValue(this.value)"">
+                            <div class=""text-center"" id=""numberOfUsersValue"">5 users</div>
+                        </div>
+                        <div class=""col-md-6"">
+                            <label for=""busynessLevel"" class=""form-label"">Busyness Level</label>
+                            <input type=""range"" class=""form-range"" id=""busynessLevel"" min=""0.1"" max=""0.9"" step=""0.1"" value=""0.6"" oninput=""updateBusynessValue(this.value)"">
+                            <div class=""text-center"" id=""busynessValue"">60% busy</div>
+                        </div>
+                    </div>
+                    <button type=""submit"" class=""btn btn-primary"" id=""generateBtn"">Generate Mock Data</button>
+                </form>
+                <div class=""mt-3"" id=""generateResult""></div>
+            </div>
+        </div>
+        
+        <div class=""card"">
+            <div class=""card-header bg-success text-white"">
+                <h3 class=""mb-0"">View Mock Calendar Data</h3>
+            </div>
+            <div class=""card-body text-center"">
+                <p>View the generated mock calendar data with all users and their events</p>
+                <a href=""/api/chat/mock-calendar-data"" class=""btn btn-success"">View Mock Calendars</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateNumberOfUsersValue(value) {
+            document.getElementById('numberOfUsersValue').textContent = value + ' users';
+        }
+
+        function updateBusynessValue(value) {
+            const percentage = Math.round(value * 100);
+            document.getElementById('busynessValue').textContent = percentage + '% busy';
+        }
+
+        document.getElementById('mockDataForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const numberOfUsers = parseInt(document.getElementById('numberOfUsers').value);
+            const busynessLevel = parseFloat(document.getElementById('busynessLevel').value);
+            
+            document.getElementById('generateBtn').disabled = true;
+            document.getElementById('generateBtn').innerHTML = 'Generating...';
+            
+            try {
+                const response = await fetch('/api/chat/generate-mock-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        numberOfUsers: numberOfUsers,
+                        busynessLevel: busynessLevel
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    let html = `<div class=""alert alert-success"">${data.message}</div>`;
+                    html += '<strong>Generated Users:</strong>';
+                    html += '<ul class=""list-group mt-2"">';
+                    data.users.forEach(user => {
+                        html += `<li class=""list-group-item"">${user}</li>`;
+                    });
+                    html += '</ul>';
+                    
+                    document.getElementById('generateResult').innerHTML = html;
+                } else {
+                    document.getElementById('generateResult').innerHTML = `<div class=""alert alert-danger"">Error: ${data.message}</div>`;
+                }
+            } catch (error) {
+                document.getElementById('generateResult').innerHTML = `<div class=""alert alert-danger"">Error: ${error.message}</div>`;
+            } finally {
+                document.getElementById('generateBtn').disabled = false;
+                document.getElementById('generateBtn').innerHTML = 'Generate Mock Data';
+            }
+        });
+    </script>
+</body>
+</html>";
+        }
+
+        private string GetMockCalendarDataHtml()
+        {
+            var mockCalendarGenerator = HttpContext.RequestServices.GetRequiredService<InterviewSchedulingBot.Services.MockCalendarGenerator>();
+            var users = mockCalendarGenerator.GetAllUsers();
+            
+            if (!users.Any())
+            {
+                // Generate default data if none exists
+                mockCalendarGenerator.GenerateCalendars(5, 0.6);
+                users = mockCalendarGenerator.GetAllUsers();
+            }
+            
+            var today = DateTime.Today;
+            var endDate = today.AddDays(7);
+            
+            var html = @"
+<!DOCTYPE html>
+<html lang=""en"">
+<head>
+    <meta charset=""UTF-8"">
+    <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
+    <title>Mock Calendar Data</title>
+    <link href=""https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css"" rel=""stylesheet"">
+    <link href=""https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"" rel=""stylesheet"">
+</head>
+<body>
+    <div class=""container mt-4"">
+        <h1 class=""mb-4"">Mock Calendar Data Visualization</h1>
+        <p class=""lead"">Showing calendar events from " + today.ToString("MMM d, yyyy") + " to " + endDate.ToString("MMM d, yyyy") + @"</p>";
+
+            foreach (var user in users)
+            {
+                var userEvents = mockCalendarGenerator.GetEventsInRange(user, today, endDate);
+                html += $@"
+        <div class=""card mb-4"">
+            <div class=""card-header bg-info text-white"">
+                <h5 class=""mb-0""><i class=""fas fa-user""></i> {user}</h5>
+            </div>
+            <div class=""card-body"">
+                <div class=""row"">";
+
+                if (userEvents.Any())
+                {
+                    var eventsByDay = userEvents.GroupBy(e => e.StartTime.Date).OrderBy(g => g.Key);
+                    
+                    foreach (var dayGroup in eventsByDay)
+                    {
+                        html += $@"
+                    <div class=""col-md-6 col-lg-4 mb-3"">
+                        <h6 class=""text-primary"">{dayGroup.Key:dddd, MMM d}</h6>";
+                        
+                        foreach (var evt in dayGroup.OrderBy(e => e.StartTime))
+                        {
+                            html += $@"
+                        <div class=""border rounded p-2 mb-2 bg-light"">
+                            <strong>{evt.Title}</strong><br>
+                            <small class=""text-muted"">
+                                <i class=""fas fa-clock""></i> {evt.StartTime:h:mm tt} - {evt.EndTime:h:mm tt}<br>
+                                <i class=""fas fa-users""></i> {evt.Attendees.Count} attendees
+                            </small>
+                        </div>";
+                        }
+                        
+                        html += @"
+                    </div>";
+                    }
+                }
+                else
+                {
+                    html += @"
+                    <div class=""col-12"">
+                        <p class=""text-muted"">No events scheduled for this time period.</p>
+                    </div>";
+                }
+
+                html += @"
+                </div>
+            </div>
+        </div>";
+            }
+
+            html += @"
+        <div class=""text-center mt-4"">
+            <a href=""/api/chat/mock-calendar-management"" class=""btn btn-primary"">
+                <i class=""fas fa-arrow-left""></i> Back to Calendar Management
+            </a>
+            <a href=""/api/chat"" class=""btn btn-success"">
+                <i class=""fas fa-comments""></i> Test Chat Interface
+            </a>
+        </div>
+    </div>
+</body>
+</html>";
+
+            return html;
+        }
+
         private string GetEnhancedChatHtml()
         {
             return @"
@@ -1176,5 +1415,11 @@ namespace InterviewSchedulingBot.Controllers
     {
         public string ContentType { get; set; } = string.Empty;
         public object? Content { get; set; }
+    }
+
+    public class MockDataRequest
+    {
+        public int NumberOfUsers { get; set; } = 5;
+        public double BusynessLevel { get; set; } = 0.6;
     }
 }

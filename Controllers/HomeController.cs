@@ -11,7 +11,6 @@ namespace InterviewSchedulingBot.Controllers
         /// Redirect to the main chat interface
         /// </summary>
         /// <returns>Redirect to chat interface</returns>
-        [HttpGet("/")]
         [HttpGet("/ui")]
         [HttpGet("/test")]
         public IActionResult Index()
