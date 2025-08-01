@@ -25,49 +25,59 @@ namespace InterviewBot.Services
                        "Would you like me to check a different time range?";
             }
             
-            // Determine if single day or date range
+            // More conversational opening line
             bool isSingleDay = startDate.Date == endDate.Date;
             
-            // Format header
             if (isSingleDay)
             {
-                sb.AppendLine($"Here are the available {durationMinutes}-minute time slots for {DateFormattingService.FormatDateWithDay(startDate)}:");
-                sb.AppendLine();
-                sb.AppendLine($"{DateFormattingService.FormatDateWithDay(startDate)}");
+                sb.AppendLine($"I've found the following {durationMinutes}-minute time slots for {DateFormattingService.FormatDateWithDay(startDate)}:");
             }
             else
             {
                 string dateRange = DateFormattingService.FormatDateRange(startDate, endDate);
-                sb.AppendLine($"Here are the available {durationMinutes}-minute time slots for " +
-                             (startDate.Date.AddDays(7) >= endDate.Date ? "next week" : "the specified period") +
-                             $" {dateRange}:");
-                sb.AppendLine();
-            }
-            
-            // Group by day and format slots
-            var slotsByDay = slots
-                .GroupBy(s => s.StartTime.Date)
-                .OrderBy(g => g.Key);
-                
-            foreach (var dayGroup in slotsByDay)
-            {
-                // Skip repeating day header if single day
-                if (!isSingleDay)
-                {
-                    sb.AppendLine();
-                    sb.AppendLine($"{DateFormattingService.FormatDateWithDay(dayGroup.Key)}");
-                }
-                
-                sb.AppendLine();
-                
-                // List slots for this day
-                foreach (var slot in dayGroup.OrderBy(s => s.StartTime))
-                {
-                    sb.AppendLine($"{slot.GetFormattedTimeRange()} {slot.Reason}");
-                }
+                sb.AppendLine($"I've found the following {durationMinutes}-minute time slots for {(startDate.AddDays(7) >= endDate.Date ? "next week" : "the requested period")} {dateRange}:");
             }
             
             sb.AppendLine();
+            
+            // Group slots by day
+            var slotsByDay = slots
+                .GroupBy(s => s.StartTime.Date)
+                .OrderBy(g => g.Key)
+                .ToDictionary(g => g.Key, g => g.OrderBy(s => s.StartTime).ToList());
+            
+            // Ensure ALL requested days are shown (even those without slots)
+            var allDays = new List<DateTime>();
+            for (var day = startDate.Date; day <= endDate.Date; day = day.AddDays(1))
+            {
+                if (day.DayOfWeek != DayOfWeek.Saturday && day.DayOfWeek != DayOfWeek.Sunday)
+                    allDays.Add(day);
+            }
+            
+            // Process each day in range
+            foreach (var day in allDays)
+            {
+                // Add day header
+                sb.AppendLine($"{DateFormattingService.FormatDateWithDay(day)}");
+                
+                if (slotsByDay.ContainsKey(day) && slotsByDay[day].Any())
+                {
+                    sb.AppendLine();
+                    // Show slots for this day
+                    foreach (var slot in slotsByDay[day])
+                    {
+                        sb.AppendLine($"{slot.GetFormattedTimeRange()} {slot.Reason}");
+                    }
+                }
+                else
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("No available time slots for this day. Please let me know which other day works best for you.");
+                }
+                
+                sb.AppendLine();
+            }
+            
             sb.Append("Please let me know which time slot works best for you.");
             
             return sb.ToString();

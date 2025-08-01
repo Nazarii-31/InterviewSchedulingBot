@@ -83,21 +83,32 @@ namespace InterviewBot.Services
                 }
             }
             
-            // Sort and take top N slots
-            var sortedSlots = result
-                .OrderByDescending(s => s.Score)
-                .ThenBy(s => s.StartTime)
-                .Take(10)
-                .ToList();
+            // Group slots by day
+            var slotsByDay = result
+                .GroupBy(s => s.StartTime.Date)
+                .ToDictionary(g => g.Key, g => g.ToList());
                 
-            // Mark best slot as recommended
-            if (sortedSlots.Any())
+            var finalSlots = new List<EnhancedTimeSlot>();
+            
+            // Process each day and mark best slot for each day
+            foreach (var day in slotsByDay.Keys.OrderBy(d => d))
             {
-                sortedSlots[0].IsRecommended = true;
-                sortedSlots[0].Reason += " ⭐ RECOMMENDED";
+                var daySlots = slotsByDay[day]
+                    .OrderByDescending(s => s.Score)
+                    .ThenBy(s => s.StartTime)
+                    .ToList();
+                    
+                if (daySlots.Any())
+                {
+                    // Mark highest-scoring slot for EACH day as recommended
+                    daySlots.First().IsRecommended = true;
+                    daySlots.First().Reason += " ⭐ RECOMMENDED";
+                    
+                    finalSlots.AddRange(daySlots);
+                }
             }
             
-            return sortedSlots;
+            return finalSlots;
         }
         
         private double GetTimeOfDayScore(DateTime time)
