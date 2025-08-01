@@ -20,12 +20,27 @@ namespace InterviewSchedulingBot.Services.Integration
         private const string BaseUrl = "https://openwebui.ai.godeltech.com/api/";
         private const string Model = "mistral:7b";
         
-        private const string SystemPrompt = @"You are a parameter extraction service. Extract ONLY the following from messages:
-1. Duration: The meeting length in minutes (default: 60 if not specified)
-2. TimeFrame: When the meeting should occur (specific day, date range, etc.)
-3. Participants: Email addresses of attendees
+        private const string SystemPrompt = @"You are a meeting parameter extraction assistant. Extract scheduling information from user messages.
 
-Respond with ONLY a JSON object containing these parameters. No explanations.";
+EXTRACT THESE PARAMETERS:
+1. Duration: Meeting length in minutes (30, 45, 60, 75, 90, 120 etc. - default: 30)
+2. TimeFrame: When they want to meet:
+   - Specific days: ""Monday"", ""Tuesday"", ""Friday""
+   - Relative: ""tomorrow"", ""next week"", ""next Monday""
+   - Date ranges: ""this week"", ""next few weeks"", ""next month""
+3. Participants: Email addresses mentioned (john@company.com, jane@company.com)
+
+EXAMPLES:
+- ""Find free slots for Friday for john.doe@company.com and jane.smith@company.com, I want 75 mins meeting""
+  → {""Duration"": 75, ""TimeFrame"": ""Friday"", ""Participants"": [""john.doe@company.com"", ""jane.smith@company.com""]}
+
+- ""I need a slot tomorrow with maria.garcia@company.com""
+  → {""Duration"": 30, ""TimeFrame"": ""tomorrow"", ""Participants"": [""maria.garcia@company.com""]}
+
+- ""Schedule interview next week for 90 minutes with alex.wilson@company.com and david.brown@company.com""
+  → {""Duration"": 90, ""TimeFrame"": ""next week"", ""Participants"": [""alex.wilson@company.com"", ""david.brown@company.com""]}
+
+Respond with ONLY a JSON object. No explanations or additional text.";
 
         public CleanOpenWebUIClient(
             HttpClient httpClient,
@@ -57,13 +72,51 @@ Respond with ONLY a JSON object containing these parameters. No explanations.";
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 var response = await _httpClient.PostAsync("chat/completions", content);
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    _logger.LogError("OpenWebUI API request failed with status {StatusCode}: {ErrorContent}", 
+                        response.StatusCode, errorContent);
+                    throw new HttpRequestException($"OpenWebUI API request failed with status {response.StatusCode}");
+                }
+                
                 var responseText = await response.Content.ReadAsStringAsync();
                 
+                if (string.IsNullOrWhiteSpace(responseText))
+                {
+                    _logger.LogError("OpenWebUI API returned empty response");
+                    throw new InvalidOperationException("OpenWebUI API returned empty response");
+                }
+                
                 var responseObj = JsonSerializer.Deserialize<JsonElement>(responseText);
-                var choices = responseObj.GetProperty("choices");
+                
+                if (!responseObj.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+                {
+                    _logger.LogError("OpenWebUI API response missing choices array");
+                    throw new InvalidOperationException("OpenWebUI API response missing choices array");
+                }
+                
                 var firstChoice = choices[0];
-                var responseMessage = firstChoice.GetProperty("message");
-                var extractedJson = responseMessage.GetProperty("content").GetString();
+                if (!firstChoice.TryGetProperty("message", out var responseMessage))
+                {
+                    _logger.LogError("OpenWebUI API response missing message in first choice");
+                    throw new InvalidOperationException("OpenWebUI API response missing message in first choice");
+                }
+                
+                if (!responseMessage.TryGetProperty("content", out var contentProperty))
+                {
+                    _logger.LogError("OpenWebUI API response missing content in message");
+                    throw new InvalidOperationException("OpenWebUI API response missing content in message");
+                }
+                
+                var extractedJson = contentProperty.GetString();
+                
+                if (string.IsNullOrWhiteSpace(extractedJson))
+                {
+                    _logger.LogError("OpenWebUI API returned empty content");
+                    throw new InvalidOperationException("OpenWebUI API returned empty content");
+                }
                 
                 return JsonSerializer.Deserialize<MeetingParameters>(extractedJson) 
                     ?? new MeetingParameters();
@@ -81,7 +134,7 @@ Respond with ONLY a JSON object containing these parameters. No explanations.";
     /// </summary>
     public record MeetingParameters
     {
-        public int Duration { get; init; } = 60;
+        public int Duration { get; init; } = 30;
         public string TimeFrame { get; init; } = "";
         public List<string> Participants { get; init; } = new();
     }

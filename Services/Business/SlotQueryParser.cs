@@ -16,6 +16,11 @@ namespace InterviewSchedulingBot.Services.Business
         
         public async Task<SlotQueryCriteria?> ParseQueryAsync(string query, CancellationToken cancellationToken = default)
         {
+            return await ParseQueryAsync(query, null, cancellationToken);
+        }
+
+        public async Task<SlotQueryCriteria?> ParseQueryAsync(string query, SlotQueryCriteria? previousCriteria = null, CancellationToken cancellationToken = default)
+        {
             try
             {
                 _logger.LogInformation("Parsing slot query: {Query}", query);
@@ -29,14 +34,14 @@ namespace InterviewSchedulingBot.Services.Business
                     return null;
                 }
                 
-                // Parse the response into slot criteria
+                // Parse the response into slot criteria, merging with previous criteria if available
                 var criteria = new SlotQueryCriteria
                 {
-                    DurationMinutes = response.Duration ?? 60,
-                    ParticipantEmails = response.Participants ?? new List<string>(),
-                    MinRequiredParticipants = response.MinRequiredParticipants ?? 0,
-                    SpecificDay = response.SpecificDay,
-                    RelativeDay = response.RelativeDay
+                    DurationMinutes = response.Duration ?? previousCriteria?.DurationMinutes ?? 30,
+                    ParticipantEmails = response.Participants?.Count > 0 ? response.Participants : (previousCriteria?.ParticipantEmails ?? new List<string>()),
+                    MinRequiredParticipants = response.MinRequiredParticipants ?? previousCriteria?.MinRequiredParticipants ?? 0,
+                    SpecificDay = response.SpecificDay ?? previousCriteria?.SpecificDay,
+                    RelativeDay = response.RelativeDay ?? previousCriteria?.RelativeDay
                 };
 
                 // Parse date range
@@ -45,14 +50,23 @@ namespace InterviewSchedulingBot.Services.Business
                     criteria.StartDate = response.DateRange.Start;
                     criteria.EndDate = response.DateRange.End;
                 }
+                else if (previousCriteria != null && (!string.IsNullOrEmpty(previousCriteria.SpecificDay) || !string.IsNullOrEmpty(previousCriteria.RelativeDay)))
+                {
+                    // Use previous date range if no new date specified
+                    criteria.StartDate = previousCriteria.StartDate;
+                    criteria.EndDate = previousCriteria.EndDate;
+                    criteria.SpecificDay = previousCriteria.SpecificDay;
+                    criteria.RelativeDay = previousCriteria.RelativeDay;
+                }
                 else
                 {
                     // Set defaults based on relative or specific day
                     SetDateRangeFromDayReference(criteria);
                 }
 
-                // Parse time of day
-                criteria.TimeOfDay = ParseTimeOfDay(response.TimeOfDay);
+                // Parse time of day - prioritize new time, fallback to previous if available
+                var newTimeOfDay = ParseTimeOfDay(response.TimeOfDay);
+                criteria.TimeOfDay = newTimeOfDay ?? previousCriteria?.TimeOfDay;
                 
                 _logger.LogInformation("Successfully parsed slot query criteria: {Criteria}", criteria);
                 return criteria;
@@ -73,13 +87,22 @@ namespace InterviewSchedulingBot.Services.Business
                 switch (criteria.RelativeDay.ToLowerInvariant())
                 {
                     case "tomorrow":
-                        criteria.StartDate = today.AddDays(1);
-                        criteria.EndDate = today.AddDays(1);
+                        var tomorrow = today.AddDays(1);
+                        // Skip weekends - if tomorrow is Saturday or Sunday, move to Monday
+                        while (tomorrow.DayOfWeek == DayOfWeek.Saturday || tomorrow.DayOfWeek == DayOfWeek.Sunday)
+                        {
+                            tomorrow = tomorrow.AddDays(1);
+                        }
+                        criteria.StartDate = tomorrow;
+                        criteria.EndDate = tomorrow;
                         break;
                     case "next week":
-                        var nextWeekStart = today.AddDays(7 - (int)today.DayOfWeek);
+                        // Next week starts from the upcoming Monday
+                        var daysUntilMonday = ((int)DayOfWeek.Monday - (int)today.DayOfWeek + 7) % 7;
+                        if (daysUntilMonday == 0) daysUntilMonday = 7; // If today is Monday, go to next Monday
+                        var nextWeekStart = today.AddDays(daysUntilMonday);
                         criteria.StartDate = nextWeekStart;
-                        criteria.EndDate = nextWeekStart.AddDays(6);
+                        criteria.EndDate = nextWeekStart.AddDays(4); // Monday to Friday
                         break;
                     default:
                         criteria.StartDate = today;
@@ -135,7 +158,7 @@ namespace InterviewSchedulingBot.Services.Business
                 
             return timeOfDay.ToLowerInvariant() switch
             {
-                "morning" => new TimeOfDayRange { Start = new TimeSpan(9, 0, 0), End = new TimeSpan(12, 0, 0) },
+                "morning" => new TimeOfDayRange { Start = new TimeSpan(8, 0, 0), End = new TimeSpan(12, 0, 0) },
                 "afternoon" => new TimeOfDayRange { Start = new TimeSpan(12, 0, 0), End = new TimeSpan(17, 0, 0) },
                 "evening" => new TimeOfDayRange { Start = new TimeSpan(17, 0, 0), End = new TimeSpan(20, 0, 0) },
                 _ => null
@@ -150,7 +173,7 @@ namespace InterviewSchedulingBot.Services.Business
         public TimeOfDayRange? TimeOfDay { get; set; }
         public List<string> ParticipantEmails { get; set; } = new();
         public int MinRequiredParticipants { get; set; }
-        public int DurationMinutes { get; set; } = 60;
+        public int DurationMinutes { get; set; } = 30;
         public string? SpecificDay { get; set; }
         public string? RelativeDay { get; set; }
 

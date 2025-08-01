@@ -40,7 +40,7 @@ namespace InterviewSchedulingBot.Tests.Unit
             foreach (var testCase in testCases)
             {
                 // Act
-                var criteria = await slotQueryParser.ParseQueryAsync(testCase.Query);
+                var criteria = await slotQueryParser.ParseQueryAsync(testCase.Query, CancellationToken.None);
 
                 // Assert
                 Assert.NotNull(criteria);

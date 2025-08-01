@@ -725,11 +725,22 @@ namespace InterviewSchedulingBot.Services.Integration
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             
-            // If OpenWebUI is not configured, return fallback immediately
-            if (_useMockData)
+            // Check if OpenWebUI is properly configured
+            var baseUrl = _configuration["OpenWebUI:BaseUrl"];
+            var apiKey = _configuration["OpenWebUI:ApiKey"];
+            
+            if (string.IsNullOrWhiteSpace(baseUrl))
             {
-                _logger.LogDebug("OpenWebUI not configured, returning fallback response for prompt");
-                return CreateFallbackTextResponse(context);
+                var error = "OpenWebUI BaseUrl is not configured. Please check your appsettings.json file.";
+                _logger.LogError(error);
+                throw new InvalidOperationException(error);
+            }
+            
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                var error = "OpenWebUI ApiKey is not configured. Please check your appsettings.json file.";
+                _logger.LogError(error);
+                throw new InvalidOperationException(error);
             }
             
             try
@@ -768,46 +779,82 @@ namespace InterviewSchedulingBot.Services.Integration
                 
                 var response = await _httpClient.PostAsync("chat/completions", content, cts.Token);
                 
-                if (response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
-                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
-                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
-                    
-                    if (responseObj.TryGetProperty("choices", out var choicesElement) &&
-                        choicesElement.GetArrayLength() > 0)
-                    {
-                        var firstChoice = choicesElement[0];
-                        if (firstChoice.TryGetProperty("message", out var messageElement) &&
-                            messageElement.TryGetProperty("content", out var contentElement))
-                        {
-                            var result = contentElement.GetString();
-                            if (!string.IsNullOrEmpty(result))
-                            {
-                                _logger.LogInformation("Generated response in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
-                                return result;
-                            }
-                        }
-                    }
+                    var errorContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var error = $"OpenWebUI API request failed with status {response.StatusCode}: {errorContent}";
+                    _logger.LogError(error);
+                    throw new HttpRequestException(error);
                 }
                 
-                _logger.LogWarning("Open WebUI API generate returned error: {StatusCode} - {ReasonPhrase}", 
-                    response.StatusCode, response.ReasonPhrase);
+                var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                
+                if (string.IsNullOrWhiteSpace(responseContent))
+                {
+                    var error = "OpenWebUI API returned empty response";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+                
+                if (!responseObj.TryGetProperty("choices", out var choicesElement) || choicesElement.GetArrayLength() == 0)
+                {
+                    var error = "OpenWebUI API response missing choices array";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                var firstChoice = choicesElement[0];
+                if (!firstChoice.TryGetProperty("message", out var messageElement))
+                {
+                    var error = "OpenWebUI API response missing message in first choice";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                if (!messageElement.TryGetProperty("content", out var contentElement))
+                {
+                    var error = "OpenWebUI API response missing content in message";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                var result = contentElement.GetString();
+                if (string.IsNullOrWhiteSpace(result))
+                {
+                    var error = "OpenWebUI API returned empty content";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                _logger.LogInformation("Generated response in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+                return result;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                _logger.LogWarning("Response generation was cancelled by user");
-                throw;
+                var error = "Response generation was cancelled by user";
+                _logger.LogWarning(error);
+                throw new InvalidOperationException(error);
             }
             catch (OperationCanceledException)
             {
-                _logger.LogWarning("Response generation timed out");
+                var error = "Response generation timed out. Please check your OpenWebUI server connectivity.";
+                _logger.LogError(error);
+                throw new TimeoutException(error);
+            }
+            catch (HttpRequestException ex)
+            {
+                var error = $"Network error connecting to OpenWebUI API: {ex.Message}";
+                _logger.LogError(ex, error);
+                throw new InvalidOperationException(error, ex);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating response with Open WebUI API");
+                var error = $"Unexpected error generating response with OpenWebUI API: {ex.Message}";
+                _logger.LogError(ex, error);
+                throw new InvalidOperationException(error, ex);
             }
-            
-            return CreateFallbackTextResponse(context);
         }
 
         // Generate actually useful mock responses with variety
