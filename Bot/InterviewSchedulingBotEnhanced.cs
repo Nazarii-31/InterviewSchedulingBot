@@ -44,6 +44,8 @@ namespace InterviewBot.Bot
         private readonly ConversationalResponseGenerator _conversationalResponseGenerator;
         private readonly DeterministicSlotRecommendationService _deterministicSlotService;
         private readonly TimeSlotResponseFormatter _timeSlotFormatter;
+        private readonly NaturalLanguageDateProcessor _naturalLanguageDateProcessor;
+        private readonly ConversationalAIResponseFormatter _conversationalAIResponseFormatter;
 
         public InterviewSchedulingBotEnhanced(
             IAuthenticationService authService, 
@@ -65,7 +67,9 @@ namespace InterviewBot.Bot
             SlotQueryParser slotQueryParser,
             ConversationalResponseGenerator conversationalResponseGenerator,
             DeterministicSlotRecommendationService deterministicSlotService,
-            TimeSlotResponseFormatter timeSlotFormatter)
+            TimeSlotResponseFormatter timeSlotFormatter,
+            NaturalLanguageDateProcessor naturalLanguageDateProcessor,
+            ConversationalAIResponseFormatter conversationalAIResponseFormatter)
         {
             _authService = authService;
             _schedulingBusinessService = schedulingBusinessService;
@@ -86,6 +90,8 @@ namespace InterviewBot.Bot
             _conversationalResponseGenerator = conversationalResponseGenerator;
             _deterministicSlotService = deterministicSlotService;
             _timeSlotFormatter = timeSlotFormatter;
+            _naturalLanguageDateProcessor = naturalLanguageDateProcessor;
+            _conversationalAIResponseFormatter = conversationalAIResponseFormatter;
             
             // Setup dialogs with specific loggers
             _dialogs = new DialogSet(_accessors.DialogStateAccessor);
@@ -884,8 +890,11 @@ namespace InterviewBot.Bot
             // Extract duration
             int duration = ExtractDurationFromMessage(message);
             
-            // Use AI-based date range interpreter 
-            var dateRange = _deterministicSlotService.InterpretDateRangeFromRequest(message, DateTime.Now);
+            // Use AI-driven natural language date processor instead of hardcoded logic
+            var dateRange = await _naturalLanguageDateProcessor.ProcessDateReferenceAsync(message, DateTime.Now);
+            
+            // Check if date was adjusted from weekend to business day
+            bool wasWeekendAdjusted = CheckIfWeekendWasAdjusted(message, dateRange, DateTime.Now);
             
             // Generate initial limited set of best time slots
             var enhancedSlots = _deterministicSlotService.GenerateConsistentTimeSlots(
@@ -895,15 +904,36 @@ namespace InterviewBot.Bot
                 emails,
                 maxInitialResults: 5); // Show fewer initial options
                 
-            // Format response using original message for context
-            string response = _timeSlotFormatter.FormatTimeSlotResponse(
+            // Use AI-driven conversational response formatting
+            string response = await _conversationalAIResponseFormatter.FormatTimeSlotResponseAsync(
                 enhancedSlots,
                 dateRange.startDate,
                 dateRange.endDate,
                 duration,
-                message); // Pass original message for context
+                message,
+                wasWeekendAdjusted);
                 
             await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+        }
+        
+        /// <summary>
+        /// Check if the original request was for a weekend day that got adjusted to a business day
+        /// </summary>
+        private bool CheckIfWeekendWasAdjusted(string originalRequest, (DateTime startDate, DateTime endDate) dateRange, DateTime currentDate)
+        {
+            var requestLower = originalRequest.ToLowerInvariant();
+            
+            // If they asked for "tomorrow" and tomorrow is a weekend, but we're showing next business day
+            if (requestLower.Contains("tomorrow"))
+            {
+                var actualTomorrow = currentDate.AddDays(1).Date;
+                var isWeekend = actualTomorrow.DayOfWeek == DayOfWeek.Saturday || actualTomorrow.DayOfWeek == DayOfWeek.Sunday;
+                var resultIsNotTomorrow = dateRange.startDate.Date != actualTomorrow;
+                
+                return isWeekend && resultIsNotTomorrow;
+            }
+            
+            return false;
         }
 
         private List<string> ExtractEmailsFromMessage(string message)

@@ -96,6 +96,10 @@ builder.Services.AddSingleton<InterviewBot.Services.DateRangeInterpreter>();
 builder.Services.AddSingleton<InterviewBot.Services.DeterministicSlotRecommendationService>();
 builder.Services.AddSingleton<InterviewBot.Services.TimeSlotResponseFormatter>();
 
+// Register new AI-driven services for pure natural language processing
+builder.Services.AddScoped<InterviewBot.Services.NaturalLanguageDateProcessor>();
+builder.Services.AddScoped<InterviewBot.Services.ConversationalAIResponseFormatter>();
+
 // === EXISTING SERVICES ===
 
 // Add services to the container.
