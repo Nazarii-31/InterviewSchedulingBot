@@ -71,6 +71,7 @@ builder.Services.AddScoped<OptimalSlotFinder>();
 
 // Register Natural Language Processing Services
 builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.IOpenWebUIClient, InterviewSchedulingBot.Services.Integration.OpenWebUIClient>();
+builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ICleanOpenWebUIClient, InterviewSchedulingBot.Services.Integration.CleanOpenWebUIClient>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.SlotQueryParser>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ConversationalResponseGenerator>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.IAIResponseService, InterviewSchedulingBot.Services.Business.AIResponseService>();
@@ -83,9 +84,6 @@ builder.Services.AddSingleton<InterviewSchedulingBot.Services.ConversationStateM
 
 // Register Bot State Accessors
 builder.Services.AddSingleton<BotStateAccessors>();
-
-// Register Mock Calendar Generator
-builder.Services.AddSingleton<InterviewSchedulingBot.Services.MockCalendarGenerator>();
 
 // Register Clean Services
 builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ISimpleOpenWebUIParameterExtractor, InterviewSchedulingBot.Services.Integration.SimpleOpenWebUIParameterExtractor>();

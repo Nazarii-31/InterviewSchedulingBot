@@ -45,7 +45,7 @@ namespace InterviewSchedulingBot.Tests.Unit
                 .ReturnsAsync(mockResponse);
 
             // Act
-            var result = await _slotQueryParser.ParseQueryAsync(query);
+            var result = await _slotQueryParser.ParseQueryAsync(query, CancellationToken.None);
 
             // Assert
             Assert.NotNull(result);
@@ -74,7 +74,7 @@ namespace InterviewSchedulingBot.Tests.Unit
                 .ReturnsAsync(mockResponse);
 
             // Act
-            var result = await _slotQueryParser.ParseQueryAsync(query);
+            var result = await _slotQueryParser.ParseQueryAsync(query, CancellationToken.None);
 
             // Assert
             Assert.NotNull(result);
@@ -100,7 +100,7 @@ namespace InterviewSchedulingBot.Tests.Unit
                 .ReturnsAsync(mockResponse);
 
             // Act
-            var result = await _slotQueryParser.ParseQueryAsync(query);
+            var result = await _slotQueryParser.ParseQueryAsync(query, CancellationToken.None);
 
             // Assert
             Assert.Null(result);

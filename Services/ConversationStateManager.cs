@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Caching.Memory;
 using InterviewSchedulingBot.Models;
+using InterviewSchedulingBot.Services.Business;
 
 namespace InterviewSchedulingBot.Services
 {
@@ -58,6 +59,47 @@ namespace InterviewSchedulingBot.Services
         {
             var history = await GetHistoryAsync(conversationId);
             return history.Any(m => m.IsFromBot && m.Text.Contains("I'm your AI-powered Interview Scheduling assistant"));
+        }
+
+        public async Task<SlotQueryCriteria?> GetLastQueryCriteriaAsync(string conversationId)
+        {
+            if (string.IsNullOrEmpty(conversationId))
+            {
+                _logger.LogWarning("Attempted to get query criteria with null conversationId");
+                return null;
+            }
+
+            var cacheKey = $"query_criteria_{conversationId}";
+            return _cache.Get<SlotQueryCriteria>(cacheKey);
+        }
+
+        public async Task SetLastQueryCriteriaAsync(string conversationId, SlotQueryCriteria criteria)
+        {
+            if (string.IsNullOrEmpty(conversationId))
+            {
+                _logger.LogWarning("Attempted to set query criteria with null conversationId");
+                return;
+            }
+
+            var cacheKey = $"query_criteria_{conversationId}";
+            _cache.Set(cacheKey, criteria, _cacheExpiration);
+            
+            _logger.LogInformation("Stored query criteria for conversation {ConversationId}: {Criteria}", 
+                conversationId, criteria.ToString());
+        }
+
+        public async Task ClearQueryCriteriaAsync(string conversationId)
+        {
+            if (string.IsNullOrEmpty(conversationId))
+            {
+                _logger.LogWarning("Attempted to clear query criteria with null conversationId");
+                return;
+            }
+
+            var cacheKey = $"query_criteria_{conversationId}";
+            _cache.Remove(cacheKey);
+            
+            _logger.LogInformation("Cleared query criteria for conversation {ConversationId}", conversationId);
         }
     }
 

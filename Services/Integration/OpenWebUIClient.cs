@@ -725,11 +725,22 @@ namespace InterviewSchedulingBot.Services.Integration
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             
-            // If OpenWebUI is not configured, return fallback immediately
-            if (_useMockData)
+            // Check if OpenWebUI is properly configured
+            var baseUrl = _configuration["OpenWebUI:BaseUrl"];
+            var apiKey = _configuration["OpenWebUI:ApiKey"];
+            
+            if (string.IsNullOrWhiteSpace(baseUrl))
             {
-                _logger.LogDebug("OpenWebUI not configured, returning fallback response for prompt");
-                return CreateFallbackTextResponse(context);
+                var error = "OpenWebUI BaseUrl is not configured. Please check your appsettings.json file.";
+                _logger.LogError(error);
+                throw new InvalidOperationException(error);
+            }
+            
+            if (string.IsNullOrWhiteSpace(apiKey))
+            {
+                var error = "OpenWebUI ApiKey is not configured. Please check your appsettings.json file.";
+                _logger.LogError(error);
+                throw new InvalidOperationException(error);
             }
             
             try
@@ -768,46 +779,82 @@ namespace InterviewSchedulingBot.Services.Integration
                 
                 var response = await _httpClient.PostAsync("chat/completions", content, cts.Token);
                 
-                if (response.IsSuccessStatusCode)
+                if (!response.IsSuccessStatusCode)
                 {
-                    var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
-                    var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
-                    
-                    if (responseObj.TryGetProperty("choices", out var choicesElement) &&
-                        choicesElement.GetArrayLength() > 0)
-                    {
-                        var firstChoice = choicesElement[0];
-                        if (firstChoice.TryGetProperty("message", out var messageElement) &&
-                            messageElement.TryGetProperty("content", out var contentElement))
-                        {
-                            var result = contentElement.GetString();
-                            if (!string.IsNullOrEmpty(result))
-                            {
-                                _logger.LogInformation("Generated response in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
-                                return result;
-                            }
-                        }
-                    }
+                    var errorContent = await response.Content.ReadAsStringAsync(cts.Token);
+                    var error = $"OpenWebUI API request failed with status {response.StatusCode}: {errorContent}";
+                    _logger.LogError(error);
+                    throw new HttpRequestException(error);
                 }
                 
-                _logger.LogWarning("Open WebUI API generate returned error: {StatusCode} - {ReasonPhrase}", 
-                    response.StatusCode, response.ReasonPhrase);
+                var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
+                
+                if (string.IsNullOrWhiteSpace(responseContent))
+                {
+                    var error = "OpenWebUI API returned empty response";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
+                
+                if (!responseObj.TryGetProperty("choices", out var choicesElement) || choicesElement.GetArrayLength() == 0)
+                {
+                    var error = "OpenWebUI API response missing choices array";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                var firstChoice = choicesElement[0];
+                if (!firstChoice.TryGetProperty("message", out var messageElement))
+                {
+                    var error = "OpenWebUI API response missing message in first choice";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                if (!messageElement.TryGetProperty("content", out var contentElement))
+                {
+                    var error = "OpenWebUI API response missing content in message";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                var result = contentElement.GetString();
+                if (string.IsNullOrWhiteSpace(result))
+                {
+                    var error = "OpenWebUI API returned empty content";
+                    _logger.LogError(error);
+                    throw new InvalidOperationException(error);
+                }
+                
+                _logger.LogInformation("Generated response in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
+                return result;
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                _logger.LogWarning("Response generation was cancelled by user");
-                throw;
+                var error = "Response generation was cancelled by user";
+                _logger.LogWarning(error);
+                throw new InvalidOperationException(error);
             }
             catch (OperationCanceledException)
             {
-                _logger.LogWarning("Response generation timed out");
+                var error = "Response generation timed out. Please check your OpenWebUI server connectivity.";
+                _logger.LogError(error);
+                throw new TimeoutException(error);
+            }
+            catch (HttpRequestException ex)
+            {
+                var error = $"Network error connecting to OpenWebUI API: {ex.Message}";
+                _logger.LogError(ex, error);
+                throw new InvalidOperationException(error, ex);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating response with Open WebUI API");
+                var error = $"Unexpected error generating response with OpenWebUI API: {ex.Message}";
+                _logger.LogError(ex, error);
+                throw new InvalidOperationException(error, ex);
             }
-            
-            return CreateFallbackTextResponse(context);
         }
 
         // Generate actually useful mock responses with variety
@@ -1100,16 +1147,24 @@ namespace InterviewSchedulingBot.Services.Integration
                 case "slot_finding":
                     return @"You are an AI interview scheduling assistant with access to calendar data. 
                             Your responses should be helpful, clear, and professional. 
-                            When presenting available time slots:
+                            When presenting available time slots, you MUST follow this EXACT format:
                             
-                            1. ALWAYS include specific dates and times in your response
-                            2. Group time slots by day for clarity
-                            3. Mention participant availability for each slot
-                            4. Use a varied vocabulary and different phrasings
-                            5. Be conversational but professional
-                            6. Format times in a readable way (e.g., '2:00 PM - 3:00 PM')
-                            7. Include brief explanations for why certain slots are recommended
+                            1. Start with: 'Here are the available [duration]-minute time slots for [day] [[dd.MM.yyyy]]:'
+                            2. Add blank line followed by day header: '[Day] [[dd.MM.yyyy]]'
+                            3. List each slot with: '- HH:mm - HH:mm' (24-hour format, no spaces around dashes except before the dash)
+                            4. Show ALL available slots for each day
+                            5. Use quarter-hour aligned times only (00, 15, 30, 45 minutes)
+                            6. Use English day names and dd.MM.yyyy date format
                             
+                            EXAMPLE FORMAT:
+                            'Here are the available 30-minute time slots for Monday [04.08.2025]:
+                            
+                            Monday [04.08.2025]
+                            - 09:00 - 09:30
+                            - 10:15 - 10:45
+                            - 14:30 - 15:00'
+                            
+                            CRITICAL: Use this EXACT formatting. Do not deviate from this structure.
                             Never respond with generic messages about finding slots without including the actual time slots.";
                             
                 case "general":
@@ -1133,29 +1188,120 @@ namespace InterviewSchedulingBot.Services.Integration
         {
             if (!slots.Any())
             {
-                return "I couldn't find any available slots that match your criteria. You might want to try a different time range or consider having fewer participants.";
+                return "I couldn't find any available slots matching your criteria.";
             }
 
-            var response = $"✨ I found {slots.Count} available time slot{(slots.Count > 1 ? "s" : "")} for you!\n\n";
+            var response = new List<string>();
+            var englishCulture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+            
+            // Ensure all slots start at quarter hours (00, 15, 30, 45)
+            var quarterHourSlots = slots.Where(slot => slot.StartTime.Minute % 15 == 0).ToList();
             
             // Group slots by day
-            var slotsByDay = slots.GroupBy(s => s.StartTime.Date).OrderBy(g => g.Key);
+            var slotsByDay = quarterHourSlots
+                .GroupBy(s => s.StartTime.Date)
+                .OrderBy(g => g.Key)
+                .ToDictionary(g => g.Key, g => g.ToList());
             
-            foreach (var dayGroup in slotsByDay)
+            // Add information about the requested time period
+            var timeRangeInfo = GetRequestedTimeRangeInfo(criteria);
+            
+            response.Add($"Here are the available {criteria.DurationMinutes}-minute time slots{timeRangeInfo}:");
+            
+            // Display all days with their slots
+            foreach (var dayGroup in slotsByDay.OrderBy(kvp => kvp.Key))
             {
-                response += $"**{dayGroup.Key:dddd, MMMM d}:**\n";
+                var day = dayGroup.Key;
+                var dayName = day.ToString("dddd", englishCulture);
+                var dateStr = day.ToString("dd.MM.yyyy", englishCulture);
                 
-                foreach (var slot in dayGroup.Take(3))
+                // Add day header with format "Monday [04.08.2025]"
+                response.Add($"\n\n{dayName} [{dateStr}]");
+                
+                // Add all slots for this day
+                var daySlots = dayGroup.Value.OrderBy(s => s.StartTime).ToList();
+                foreach (var slot in daySlots)
                 {
-                    response += $"• {slot.StartTime:h:mm tt} - {slot.EndTime:h:mm tt}";
-                    response += $" ({slot.AvailableParticipants.Count}/{slot.TotalParticipants} participants available)\n";
+                    var startTimeStr = slot.StartTime.ToString("HH:mm", englishCulture);
+                    var endTimeStr = slot.EndTime.ToString("HH:mm", englishCulture);
+                    response.Add($"\n- {startTimeStr} - {endTimeStr}");
                 }
-                
-                response += "\n";
             }
+            
+            response.Add("\n\nPlease let me know which time slot works best for you.");
+            
+            return string.Join("", response);
+        }
 
-            response += "Would you like me to check other time options or show you different availability?";
-            return response;
+        private string GetRequestedTimeRangeInfo(InterviewSchedulingBot.Services.Business.SlotQueryCriteria criteria)
+        {
+            var timeInfo = "";
+            var englishCulture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
+            
+            // Add specific day information with exact date
+            if (!string.IsNullOrEmpty(criteria.SpecificDay))
+            {
+                // Find the actual date for the specific day
+                var requestedDayOfWeek = ParseDayOfWeek(criteria.SpecificDay);
+                if (requestedDayOfWeek.HasValue)
+                {
+                    var today = DateTime.Today;
+                    var daysUntilRequested = ((int)requestedDayOfWeek.Value - (int)today.DayOfWeek + 7) % 7;
+                    if (daysUntilRequested == 0 && DateTime.Now.Hour >= 17) daysUntilRequested = 7; // If it's the same day but late, assume next week
+                    var requestedDate = today.AddDays(daysUntilRequested);
+                    timeInfo += $" for {criteria.SpecificDay} [{requestedDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else
+                {
+                    timeInfo += $" for {criteria.SpecificDay}";
+                }
+            }
+            else if (!string.IsNullOrEmpty(criteria.RelativeDay))
+            {
+                if (criteria.RelativeDay.ToLower().Contains("tomorrow"))
+                {
+                    // For "tomorrow", format as "Monday [04.08.2025]" (no mention of "tomorrow")
+                    var tomorrow = criteria.StartDate;
+                    var dayName = tomorrow.ToString("dddd", englishCulture);
+                    timeInfo += $" for {dayName} [{tomorrow.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else if (criteria.RelativeDay.ToLower().Contains("week"))
+                {
+                    timeInfo += $" for {criteria.RelativeDay}\n[{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)} - {criteria.EndDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else
+                {
+                    timeInfo += $" for {criteria.RelativeDay} [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+            }
+            else if (criteria.StartDate != DateTime.MinValue && criteria.EndDate != DateTime.MinValue)
+            {
+                if (criteria.StartDate.Date == criteria.EndDate.Date)
+                {
+                    timeInfo += $" for [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else
+                {
+                    timeInfo += $" between [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)}] and [{criteria.EndDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+            }
+            
+            return timeInfo;
+        }
+
+        private DayOfWeek? ParseDayOfWeek(string dayName)
+        {
+            return dayName?.ToLowerInvariant() switch
+            {
+                "monday" => DayOfWeek.Monday,
+                "tuesday" => DayOfWeek.Tuesday,
+                "wednesday" => DayOfWeek.Wednesday,
+                "thursday" => DayOfWeek.Thursday,
+                "friday" => DayOfWeek.Friday,
+                "saturday" => DayOfWeek.Saturday,
+                "sunday" => DayOfWeek.Sunday,
+                _ => null
+            };
         }
 
         private string CreateVariedFallbackResponse(string message, List<MessageHistoryItem> history, ConversationOptions options)

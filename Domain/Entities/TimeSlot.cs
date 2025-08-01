@@ -67,8 +67,18 @@ namespace InterviewBot.Domain.Entities
         public double Score { get; set; }
         public int AvailableParticipants { get; set; }
         public int TotalParticipants { get; set; }
+        public List<string> AvailableParticipantEmails { get; set; } = new List<string>();
+        public List<ParticipantConflict> UnavailableParticipants { get; set; } = new List<ParticipantConflict>();
         
         public TimeSpan Duration => EndTime - StartTime;
         public double AvailabilityPercentage => TotalParticipants > 0 ? (double)AvailableParticipants / TotalParticipants * 100 : 0;
+    }
+
+    public class ParticipantConflict
+    {
+        public string Email { get; set; } = "";
+        public string ConflictReason { get; set; } = "";
+        public DateTime? ConflictStartTime { get; set; }
+        public DateTime? ConflictEndTime { get; set; }
     }
 }

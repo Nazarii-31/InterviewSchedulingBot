@@ -73,41 +73,69 @@ namespace InterviewBot.Infrastructure.Scheduling
             InterviewRequirements requirements)
         {
             var rankedSlots = new List<RankedTimeSlot>();
+            var totalParticipants = participantAvailability.Count;
             
-            // Get all unique time points where availability changes
-            var timePoints = new SortedSet<DateTime>();
+            // For each participant's available slots, find potential meeting times
+            var allPotentialSlots = new List<DateTime>();
             
             foreach (var participantSlots in participantAvailability.Values)
             {
                 foreach (var slot in participantSlots)
                 {
-                    timePoints.Add(slot.StartTime);
-                    timePoints.Add(slot.EndTime);
+                    // Generate potential meeting start times within this available slot
+                    var current = slot.StartTime;
+                    while (current.AddMinutes(requirements.DurationMinutes) <= slot.EndTime)
+                    {
+                        allPotentialSlots.Add(current);
+                        current = current.AddMinutes(15); // Check every 15 minutes
+                    }
                 }
             }
             
-            var timePointsList = timePoints.ToList();
-            var totalParticipants = participantAvailability.Count;
+            // Remove duplicates and sort
+            var uniqueSlots = allPotentialSlots.Distinct().OrderBy(s => s).ToList();
             
-            // Check each consecutive pair of time points for potential slots
-            for (int i = 0; i < timePointsList.Count - 1; i++)
+            // Evaluate each potential slot
+            foreach (var start in uniqueSlots)
             {
-                var start = timePointsList[i];
                 var end = start.AddMinutes(requirements.DurationMinutes);
                 
-                // Make sure the slot doesn't exceed the next time point boundary
-                if (i + 1 < timePointsList.Count && end > timePointsList[i + 1])
-                    continue;
+                // Count available participants for this slot and track who they are
+                var availableParticipantIds = new List<string>();
+                var unavailableParticipants = new List<ParticipantConflict>();
                 
-                // Count available participants for this slot
-                var availableParticipants = 0;
-                foreach (var participantSlots in participantAvailability.Values)
+                foreach (var participantEntry in participantAvailability)
                 {
-                    if (participantSlots.Any(slot => slot.StartTime <= start && slot.EndTime >= end))
+                    var participantId = participantEntry.Key;
+                    var participantSlots = participantEntry.Value;
+                    
+                    bool isAvailable = participantSlots.Any(slot => slot.StartTime <= start && slot.EndTime >= end);
+                    
+                    if (isAvailable)
                     {
-                        availableParticipants++;
+                        availableParticipantIds.Add(participantId);
+                    }
+                    else
+                    {
+                        // Find conflicting meetings for this participant
+                        var conflictingSlot = participantSlots
+                            .FirstOrDefault(slot => start < slot.EndTime && end > slot.StartTime);
+                        
+                        var conflictReason = conflictingSlot != null 
+                            ? $"Meeting until {conflictingSlot.EndTime:HH:mm}"
+                            : "Not available";
+                            
+                        unavailableParticipants.Add(new ParticipantConflict
+                        {
+                            Email = participantId,
+                            ConflictReason = conflictReason,
+                            ConflictStartTime = conflictingSlot?.StartTime,
+                            ConflictEndTime = conflictingSlot?.EndTime
+                        });
                     }
                 }
+                
+                var availableParticipants = availableParticipantIds.Count;
                 
                 // Only consider slots where at least half the participants are available
                 if (availableParticipants >= Math.Max(1, totalParticipants / 2))
@@ -120,7 +148,9 @@ namespace InterviewBot.Infrastructure.Scheduling
                         EndTime = end,
                         Score = score,
                         AvailableParticipants = availableParticipants,
-                        TotalParticipants = totalParticipants
+                        TotalParticipants = totalParticipants,
+                        AvailableParticipantEmails = availableParticipantIds,
+                        UnavailableParticipants = unavailableParticipants
                     });
                 }
             }

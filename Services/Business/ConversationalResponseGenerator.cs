@@ -1,5 +1,6 @@
 using InterviewBot.Domain.Entities;
 using InterviewSchedulingBot.Services.Integration;
+using System.Globalization;
 
 namespace InterviewSchedulingBot.Services.Business
 {
@@ -194,46 +195,194 @@ namespace InterviewSchedulingBot.Services.Business
                 return "I couldn't find any available slots matching your criteria.";
 
             var response = new List<string>();
-            var bestSlot = slots.OrderByDescending(s => s.Score).First();
+            var englishCulture = CultureInfo.GetCultureInfo("en-US");
             
-            response.Add($"🎯 **Great news!** I found {slots.Count} available slot{(slots.Count > 1 ? "s" : "")} for your {criteria.DurationMinutes}-minute meeting.");
-            
-            if (slotsByDay.Count == 1)
+            // Filter slots by time of day if specified
+            if (criteria.TimeOfDay != null)
             {
-                var day = slotsByDay.Keys.First();
-                response.Add($"\n📅 **{day.DayOfWeek}, {day:MMM dd}:**");
+                slots = slots.Where(slot => 
+                    slot.StartTime.TimeOfDay >= criteria.TimeOfDay.Start && 
+                    slot.StartTime.TimeOfDay <= criteria.TimeOfDay.End
+                ).ToList();
                 
-                foreach (var slot in slotsByDay[day].OrderBy(s => s.StartTime))
+                slotsByDay = slots
+                    .GroupBy(s => s.StartTime.Date)
+                    .OrderBy(g => g.Key)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+            }
+            
+            // Ensure all slots start at quarter hours (00, 15, 30, 45)
+            var quarterHourSlots = new List<RankedTimeSlot>();
+            foreach (var slot in slots)
+            {
+                var minutes = slot.StartTime.Minute;
+                if (minutes % 15 == 0) // Keep only slots that start at 00, 15, 30, or 45 minutes
                 {
-                    var availability = slot.TotalParticipants > 0 
-                        ? $" ({slot.AvailableParticipants}/{slot.TotalParticipants} participants available)"
-                        : "";
-                    response.Add($"   • {slot.StartTime:HH:mm} - {slot.EndTime:HH:mm}{availability}");
+                    quarterHourSlots.Add(slot);
                 }
+            }
+            
+            // Re-group by day after filtering quarter-hour slots
+            slotsByDay = quarterHourSlots
+                .GroupBy(s => s.StartTime.Date)
+                .OrderBy(g => g.Key)
+                .ToDictionary(g => g.Key, g => g.ToList());
+            
+            // Add information about the requested time period
+            var timeRangeInfo = GetRequestedTimeRangeInfo(criteria);
+            
+            response.Add($"Here are the available {criteria.DurationMinutes}-minute time slots{timeRangeInfo}:");
+            
+            // Display all days with their slots - uniform format for single or multi-day results
+            foreach (var dayGroup in slotsByDay.OrderBy(kvp => kvp.Key))
+            {
+                var day = dayGroup.Key;
+                var dayName = day.ToString("dddd", englishCulture);
+                var dateStr = day.ToString("dd.MM.yyyy", englishCulture);
+                
+                // Add day header with format "Monday [04.08.2025]"
+                response.Add($"\n\n{dayName} [{dateStr}]");
+                
+                // Add all slots for this day
+                var daySlots = dayGroup.Value.OrderBy(s => s.StartTime).ToList();
+                if (daySlots.Any())
+                {
+                    foreach (var slot in daySlots)
+                    {
+                        var startTimeStr = slot.StartTime.ToString("HH:mm", englishCulture);
+                        var endTimeStr = slot.EndTime.ToString("HH:mm", englishCulture);
+                        response.Add($"\n- {startTimeStr} - {endTimeStr}");
+                    }
+                }
+                else
+                {
+                    response.Add("\n- No available slots");
+                }
+            }
+            
+            // Handle empty results after filtering
+            if (!slotsByDay.Any())
+            {
+                response.Add("\n\nNo slots found matching your criteria. Try a different time range or day.");
             }
             else
             {
-                response.Add($"\n📅 **Available across {slotsByDay.Count} days:**");
+                response.Add("\n\nPlease let me know which time slot works best for you.");
+            }
+            
+            return string.Join("", response);
+        }
+
+        private string GetAvailabilityInfo(RankedTimeSlot slot)
+        {
+            if (slot.TotalParticipants == 0)
+                return "";
                 
-                foreach (var dayGroup in slotsByDay.OrderBy(kvp => kvp.Key))
+            if (slot.AvailableParticipants == slot.TotalParticipants)
+            {
+                return " ✅ All participants available";
+            }
+            else if (slot.AvailableParticipants > 0)
+            {
+                var availableInfo = $" ⚠️ {slot.AvailableParticipants}/{slot.TotalParticipants} participants available";
+                
+                if (slot.UnavailableParticipants.Any())
                 {
-                    response.Add($"\n**{dayGroup.Key.DayOfWeek}, {dayGroup.Key:MMM dd}:**");
-                    foreach (var slot in dayGroup.Value.Take(3).OrderBy(s => s.StartTime))
+                    var conflicts = slot.UnavailableParticipants
+                        .Select(p => $"{p.Email} ({p.ConflictReason})")
+                        .Take(2); // Limit to first 2 to avoid too much text
+                    
+                    availableInfo += $"\n     Unavailable: {string.Join(", ", conflicts)}";
+                    
+                    if (slot.UnavailableParticipants.Count > 2)
                     {
-                        var availability = slot.TotalParticipants > 0 
-                            ? $" ({slot.AvailableParticipants}/{slot.TotalParticipants} available)"
-                            : "";
-                        response.Add($"   • {slot.StartTime:HH:mm} - {slot.EndTime:HH:mm}{availability}");
+                        availableInfo += $" and {slot.UnavailableParticipants.Count - 2} others";
                     }
+                }
+                
+                return availableInfo;
+            }
+            else
+            {
+                return " ❌ No participants available";
+            }
+        }
+
+        private DayOfWeek? ParseDayOfWeek(string dayName)
+        {
+            return dayName?.ToLowerInvariant() switch
+            {
+                "monday" => DayOfWeek.Monday,
+                "tuesday" => DayOfWeek.Tuesday,
+                "wednesday" => DayOfWeek.Wednesday,
+                "thursday" => DayOfWeek.Thursday,
+                "friday" => DayOfWeek.Friday,
+                "saturday" => DayOfWeek.Saturday,
+                "sunday" => DayOfWeek.Sunday,
+                _ => null
+            };
+        }
+
+        private string GetRequestedTimeRangeInfo(SlotQueryCriteria criteria)
+        {
+            var timeInfo = "";
+            var englishCulture = CultureInfo.GetCultureInfo("en-US");
+            
+            // Add specific day information with exact date
+            if (!string.IsNullOrEmpty(criteria.SpecificDay))
+            {
+                // Find the actual date for the specific day
+                var requestedDayOfWeek = ParseDayOfWeek(criteria.SpecificDay);
+                if (requestedDayOfWeek.HasValue)
+                {
+                    var today = DateTime.Today;
+                    var daysUntilRequested = ((int)requestedDayOfWeek.Value - (int)today.DayOfWeek + 7) % 7;
+                    if (daysUntilRequested == 0 && DateTime.Now.Hour >= 17) daysUntilRequested = 7; // If it's the same day but late, assume next week
+                    var requestedDate = today.AddDays(daysUntilRequested);
+                    timeInfo += $" for {criteria.SpecificDay} [{requestedDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else
+                {
+                    timeInfo += $" for {criteria.SpecificDay}";
+                }
+            }
+            else if (!string.IsNullOrEmpty(criteria.RelativeDay))
+            {
+                if (criteria.RelativeDay.ToLower().Contains("tomorrow"))
+                {
+                    // For "tomorrow", format as "Monday [04.08.2025]" (no mention of "tomorrow")
+                    var tomorrow = criteria.StartDate;
+                    var dayName = tomorrow.ToString("dddd", englishCulture);
+                    timeInfo += $" for {dayName} [{tomorrow.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else if (criteria.RelativeDay.ToLower().Contains("week"))
+                {
+                    timeInfo += $" for {criteria.RelativeDay} [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)} - {criteria.EndDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else
+                {
+                    timeInfo += $" for {criteria.RelativeDay} [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+            }
+            else if (criteria.StartDate != DateTime.MinValue && criteria.EndDate != DateTime.MinValue)
+            {
+                if (criteria.StartDate.Date == criteria.EndDate.Date)
+                {
+                    timeInfo += $" for [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else
+                {
+                    timeInfo += $" between [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)}] and [{criteria.EndDate.ToString("dd.MM.yyyy", englishCulture)}]";
                 }
             }
             
-            response.Add($"\n⭐ **Best recommendation:** {bestSlot.StartTime:ddd, MMM dd} at {bestSlot.StartTime:HH:mm} " +
-                        $"(Score: {bestSlot.Score:F0})");
+            // Add time of day information only if specified
+            if (criteria.TimeOfDay != null)
+            {
+                timeInfo += $" during {criteria.TimeOfDay.Start:HH\\:mm} to {criteria.TimeOfDay.End:HH\\:mm}";
+            }
             
-            response.Add("\nWould you like me to schedule one of these slots or find different options?");
-            
-            return string.Join("", response);
+            return timeInfo;
         }
 
         private string GenerateFallbackConflictResponse(

@@ -138,7 +138,7 @@ namespace InterviewSchedulingBot.Controllers
         public IActionResult MockCalendarManagement()
         {
             // Redirect to the new clean mock data interface
-            return Redirect("/api/clean-mock-data/interface");
+            return Redirect("/api/mock-data/interface");
         }
 
         [HttpPost("generate-mock-data")]
@@ -146,13 +146,30 @@ namespace InterviewSchedulingBot.Controllers
         {
             try
             {
-                var mockCalendarGenerator = HttpContext.RequestServices.GetRequiredService<InterviewSchedulingBot.Services.MockCalendarGenerator>();
-                mockCalendarGenerator.GenerateCalendars(request.NumberOfUsers, request.BusynessLevel);
+                // Use the new clean mock data generator instead of the old one
+                var cleanMockDataGenerator = HttpContext.RequestServices.GetRequiredService<InterviewSchedulingBot.Services.Business.ICleanMockDataGenerator>();
+                
+                var settings = new InterviewSchedulingBot.Services.Business.MockDataSettings
+                {
+                    UserCount = request.NumberOfUsers,
+                    CalendarRangeDays = 14,
+                    MeetingDensity = request.BusynessLevel switch
+                    {
+                        var level when level < 0.3 => InterviewSchedulingBot.Services.Business.MeetingDensity.Low,
+                        var level when level < 0.7 => InterviewSchedulingBot.Services.Business.MeetingDensity.Medium,
+                        _ => InterviewSchedulingBot.Services.Business.MeetingDensity.High
+                    }
+                };
+                
+                cleanMockDataGenerator.UpdateSettings(settings);
+                
+                var profiles = cleanMockDataGenerator.GetUserProfiles();
                 
                 return Ok(new { 
                     success = true, 
-                    message = $"Successfully generated calendars for {request.NumberOfUsers} users with {request.BusynessLevel:P0} busyness level",
-                    users = mockCalendarGenerator.GetAllUsers() 
+                    message = $"Successfully generated calendars for {request.NumberOfUsers} users using Clean Mock Data Generator",
+                    users = profiles.Select(p => p.Email).ToList(),
+                    settings = settings
                 });
             }
             catch (Exception ex)
@@ -278,89 +295,112 @@ namespace InterviewSchedulingBot.Controllers
 
         private string GetMockCalendarDataHtml()
         {
-            var mockCalendarGenerator = HttpContext.RequestServices.GetRequiredService<InterviewSchedulingBot.Services.MockCalendarGenerator>();
-            var users = mockCalendarGenerator.GetAllUsers();
-            
-            if (!users.Any())
+            try
             {
-                // Generate default data if none exists
-                mockCalendarGenerator.GenerateCalendars(5, 0.6);
-                users = mockCalendarGenerator.GetAllUsers();
-            }
-            
-            var today = DateTime.Today;
-            var endDate = today.AddDays(7);
-            
-            var html = @"
+                var cleanMockDataGenerator = HttpContext.RequestServices.GetRequiredService<InterviewSchedulingBot.Services.Business.ICleanMockDataGenerator>();
+                var profiles = cleanMockDataGenerator.GetUserProfiles();
+                
+                if (!profiles.Any())
+                {
+                    // Generate default data if none exists
+                    cleanMockDataGenerator.ResetToDefault();
+                    profiles = cleanMockDataGenerator.GetUserProfiles();
+                }
+                
+                var today = DateTime.Today;
+                var endDate = today.AddDays(7);
+                
+                var html = @"
 <!DOCTYPE html>
 <html lang=""en"">
 <head>
     <meta charset=""UTF-8"">
     <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"">
-    <title>Mock Calendar Data</title>
+    <title>Clean Mock Calendar Data</title>
     <link href=""https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css"" rel=""stylesheet"">
     <link href=""https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"" rel=""stylesheet"">
 </head>
 <body>
     <div class=""container mt-4"">
-        <h1 class=""mb-4"">Mock Calendar Data Visualization</h1>
-        <p class=""lead"">Showing calendar events from " + today.ToString("MMM d, yyyy") + " to " + endDate.ToString("MMM d, yyyy") + @"</p>";
+        <h1 class=""mb-4""><i class=""fas fa-calendar-alt""></i> Clean Mock Calendar Data</h1>
+        <p class=""lead"">Generated using CleanMockDataGenerator - showing calendar events from " + today.ToString("MMM d, yyyy") + " to " + endDate.ToString("MMM d, yyyy") + @"</p>
+        <p class=""text-muted"">This system includes both organizers and participants for realistic conflict detection.</p>";
 
-            foreach (var user in users)
-            {
-                var userEvents = mockCalendarGenerator.GetEventsInRange(user, today, endDate);
-                html += $@"
+                foreach (var profile in profiles)
+                {
+                    html += $@"
         <div class=""card mb-4"">
-            <div class=""card-header bg-info text-white"">
-                <h5 class=""mb-0""><i class=""fas fa-user""></i> {user}</h5>
+            <div class=""card-header bg-primary text-white"">
+                <h5 class=""mb-0""><i class=""fas fa-user""></i> {profile.Name}</h5>
+                <small>{profile.Email} | {profile.JobTitle} | {profile.Department}</small>
             </div>
             <div class=""card-body"">
-                <div class=""row"">";
+                <div class=""row"">
+                    <div class=""col-md-6"">
+                        <h6><i class=""fas fa-clock""></i> Working Hours</h6>
+                        <p>{profile.WorkingHours.StartTime} - {profile.WorkingHours.EndTime}</p>
+                    </div>
+                    <div class=""col-md-6"">
+                        <h6><i class=""fas fa-globe""></i> Time Zone</h6>
+                        <p>{profile.TimeZone}</p>
+                    </div>
+                </div>
+                
+                <h6><i class=""fas fa-calendar""></i> Calendar Events</h6>";
 
-                if (userEvents.Any())
-                {
-                    var eventsByDay = userEvents.GroupBy(e => e.StartTime.Date).OrderBy(g => g.Key);
+                    // Get calendar events for this user
+                    var userEvents = cleanMockDataGenerator.GetCalendarEvents(profile.Email, today, endDate);
                     
-                    foreach (var dayGroup in eventsByDay)
+                    if (userEvents.Any())
                     {
-                        html += $@"
-                    <div class=""col-md-6 col-lg-4 mb-3"">
-                        <h6 class=""text-primary"">{dayGroup.Key:dddd, MMM d}</h6>";
+                        var eventsByDay = userEvents.GroupBy(e => e.StartTime.Date).OrderBy(g => g.Key);
                         
-                        foreach (var evt in dayGroup.OrderBy(e => e.StartTime))
+                        html += @"<div class=""row"">";
+                        
+                        foreach (var dayGroup in eventsByDay)
                         {
                             html += $@"
+                    <div class=""col-md-6 col-lg-4 mb-3"">
+                        <h6 class=""text-primary"">{dayGroup.Key:dddd, MMM d}</h6>";
+                            
+                            foreach (var evt in dayGroup.OrderBy(e => e.StartTime))
+                            {
+                                html += $@"
                         <div class=""border rounded p-2 mb-2 bg-light"">
                             <strong>{evt.Title}</strong><br>
                             <small class=""text-muted"">
                                 <i class=""fas fa-clock""></i> {evt.StartTime:h:mm tt} - {evt.EndTime:h:mm tt}<br>
-                                <i class=""fas fa-users""></i> {evt.Attendees.Count} attendees
+                                <i class=""fas fa-map-marker-alt""></i> {evt.Location ?? "No location"}
                             </small>
                         </div>";
+                            }
+                            
+                            html += @"
+                    </div>";
                         }
                         
-                        html += @"
-                    </div>";
+                        html += @"</div>";
                     }
-                }
-                else
-                {
+                    else
+                    {
+                        html += @"
+                <div class=""alert alert-info"">
+                    <i class=""fas fa-info-circle""></i> No events scheduled for this time period.
+                </div>";
+                    }
+
                     html += @"
-                    <div class=""col-12"">
-                        <p class=""text-muted"">No events scheduled for this time period.</p>
-                    </div>";
+            </div>
+        </div>";
                 }
 
                 html += @"
-                </div>
-            </div>
-        </div>";
-            }
-
-            html += @"
         <div class=""text-center mt-4"">
-            <a href=""/api/chat/mock-calendar-management"" class=""btn btn-primary"">
-                <i class=""fas fa-arrow-left""></i> Back to Calendar Management
+            <a href=""/api/mock-data/interface"" class=""btn btn-primary"">
+                <i class=""fas fa-cog""></i> Manage Mock Data Settings
+            </a>
+            <a href=""/api/mock-data/export"" class=""btn btn-secondary"" target=""_blank"">
+                <i class=""fas fa-download""></i> Export Data
             </a>
             <a href=""/api/chat"" class=""btn btn-success"">
                 <i class=""fas fa-comments""></i> Test Chat Interface
@@ -369,8 +409,28 @@ namespace InterviewSchedulingBot.Controllers
     </div>
 </body>
 </html>";
-
-            return html;
+                
+                return html;
+            }
+            catch (Exception ex)
+            {
+                return $@"
+<!DOCTYPE html>
+<html>
+<head><title>Error</title></head>
+<body>
+    <div class=""container mt-4"">
+        <div class=""alert alert-danger"">
+            <h4>Error loading mock calendar data</h4>
+            <p>{ex.Message}</p>
+        </div>
+        <div class=""text-center"">
+            <a href=""/api/chat"" class=""btn btn-primary"">Back to Chat Interface</a>
+        </div>
+    </div>
+</body>
+</html>";
+            }
         }
 
         private string GetEnhancedChatHtml()
@@ -800,15 +860,6 @@ namespace InterviewSchedulingBot.Controllers
     </div>
     
     <div class=""container"">
-        <div class=""tabs"">
-            <button class=""tab-button active"" onclick=""openTab(event, 'chat-interface')"">
-                <i class=""fas fa-comments""></i> AI Chat Interface
-            </button>
-            <button class=""tab-button"" onclick=""openTab(event, 'mock-data')"">
-                <i class=""fas fa-database""></i> Mock Data Management
-            </button>
-        </div>
-
         <!-- Chat Interface Tab -->
         <div id=""chat-interface"" class=""tab-content active"">
             <div class=""chat-container"">
@@ -822,64 +873,6 @@ namespace InterviewSchedulingBot.Controllers
                 </div>
             </div>
         </div>
-
-        <!-- Mock Data Tab -->
-        <div id=""mock-data"" class=""tab-content"">
-            <div class=""info-panel"">
-                <h4><i class=""fas fa-info-circle""></i> Mock Data Management</h4>
-                <p>Control the test data used by the bot to simulate different scheduling scenarios. 
-                   Modify user availability, working hours, and calendar events to test various use cases 
-                   and see how the AI responds to different constraints.</p>
-            </div>
-            
-            <div class=""mock-data-container"">
-                <div class=""mock-data-section"">
-                    <h3><i class=""fas fa-cog""></i> Calendar Generation Settings</h3>
-                    <div class=""form-row"">
-                        <div class=""form-group"">
-                            <label for=""generation-duration"">Generate calendar events for:</label>
-                            <select id=""generation-duration"">
-                                <option value=""1"">1 Day</option>
-                                <option value=""3"">3 Days</option>
-                                <option value=""7"" selected>1 Week</option>
-                                <option value=""14"">2 Weeks</option>
-                                <option value=""30"">1 Month</option>
-                            </select>
-                        </div>
-                        <div class=""form-group"">
-                            <label for=""generation-density"">Meeting density:</label>
-                            <select id=""generation-density"">
-                                <option value=""low"">Low (0-1 per day)</option>
-                                <option value=""medium"" selected>Medium (1-3 per day)</option>
-                                <option value=""high"">High (3-5 per day)</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <div class=""mock-data-section"">
-                    <h3><i class=""fas fa-users""></i> User Profiles</h3>
-                    <div id=""unified-user-data"">
-                        <!-- User data will be populated by JavaScript -->
-                    </div>
-                </div>
-
-                <div class=""mock-data-actions"">
-                    <button type=""button"" class=""btn-primary"" onclick=""resetMockData()"">
-                        <i class=""fas fa-refresh""></i> Reset to Default
-                    </button>
-                    <button type=""button"" class=""btn-secondary"" onclick=""generateRandomData()"">
-                        <i class=""fas fa-random""></i> Generate Random Data
-                    </button>
-                    <button type=""button"" class=""btn-secondary"" onclick=""regenerateCalendarData()"">
-                        <i class=""fas fa-calendar-plus""></i> Regenerate Calendar Events
-                    </button>
-                    <button type=""button"" class=""btn-secondary"" onclick=""exportMockData()"">
-                        <i class=""fas fa-download""></i> Export Data
-                    </button>
-                </div>
-            </div>
-        </div>
     </div>
 
     <div id=""statusIndicator"" class=""status-indicator status-connected"" style=""display: none;"">
@@ -890,32 +883,10 @@ namespace InterviewSchedulingBot.Controllers
         let conversationId = null;
         let isLoading = false;
 
-        // Tab functionality
-        function openTab(evt, tabName) {
-            var i, tabcontent, tablinks;
-            
-            // Hide all tab content
-            tabcontent = document.getElementsByClassName('tab-content');
-            for (i = 0; i < tabcontent.length; i++) {
-                tabcontent[i].classList.remove('active');
-            }
-            
-            // Remove active class from all tab buttons
-            tablinks = document.getElementsByClassName('tab-button');
-            for (i = 0; i < tablinks.length; i++) {
-                tablinks[i].classList.remove('active');
-            }
-            
-            // Show the current tab and mark button as active
-            document.getElementById(tabName).classList.add('active');
-            evt.currentTarget.classList.add('active');
-        }
-
         // Initialize the chat
         document.addEventListener('DOMContentLoaded', function() {
             showWelcomeMessage();
             setupEventListeners();
-            initializeMockData();
         });
 
         function setupEventListeners() {
@@ -998,19 +969,6 @@ namespace InterviewSchedulingBot.Controllers
             // Don't add empty messages
             if (!text || text.trim() === '') {
                 return;
-            }
-            
-            // Check if this exact message is already in the chat
-            const existingMessages = document.querySelectorAll('.message');
-            for (const existingMessage of existingMessages) {
-                const existingText = existingMessage.querySelector('.message-text')?.textContent;
-                const existingIsBot = existingMessage.classList.contains('bot');
-                
-                // If same text and from same source, it's a duplicate - don't add it
-                if (existingText === text && existingIsBot === isBot) {
-                    console.log('Prevented duplicate message:', text);
-                    return;
-                }
             }
             
             const messageDiv = document.createElement('div');
@@ -1156,109 +1114,6 @@ namespace InterviewSchedulingBot.Controllers
             calendarAvailability: []
         };
 
-        function initializeMockData() {
-            displayUserData();
-            generateCalendarData();
-        }
-
-        function displayUserData() {
-            const container = document.getElementById('unified-user-data');
-            if (!container) return;
-
-            container.innerHTML = '';
-            
-            mockData.userProfiles.forEach(user => {
-                const userCard = document.createElement('div');
-                userCard.className = 'user-card';
-                
-                const workingHours = mockData.workingHours.find(wh => wh.userEmail === user.email);
-                
-                userCard.innerHTML = `
-                    <h4>${user.name}</h4>
-                    <p><strong>Email:</strong> ${user.email}</p>
-                    <p><strong>Title:</strong> ${user.jobTitle}</p>
-                    <p><strong>Department:</strong> ${user.department}</p>
-                    <p><strong>Time Zone:</strong> ${user.timeZone}</p>
-                    <p><strong>Working Hours:</strong> ${workingHours ? workingHours.startTime + ' - ' + workingHours.endTime : 'Not set'}</p>
-                `;
-                
-                container.appendChild(userCard);
-            });
-        }
-
-        function generateCalendarData() {
-            const duration = parseInt(document.getElementById('generation-duration')?.value || '7');
-            const density = document.getElementById('generation-density')?.value || 'medium';
-            
-            // Generate calendar events based on settings
-            mockData.calendarAvailability = mockData.userProfiles.map(user => ({
-                userEmail: user.email,
-                busySlots: generateBusySlots(user.email, duration, density)
-            }));
-        }
-
-        function generateBusySlots(userEmail, duration, density) {
-            const slots = [];
-            const now = new Date();
-            const eventsPerDay = density === 'low' ? 1 : density === 'medium' ? 2 : 4;
-            
-            for (let i = 0; i < duration; i++) {
-                const date = new Date(now);
-                date.setDate(now.getDate() + i);
-                
-                // Skip weekends
-                if (date.getDay() === 0 || date.getDay() === 6) continue;
-                
-                for (let j = 0; j < eventsPerDay; j++) {
-                    const startHour = 9 + Math.floor(Math.random() * 8);
-                    const startMinute = Math.random() < 0.5 ? 0 : 30;
-                    const durationMins = [30, 60, 90][Math.floor(Math.random() * 3)];
-                    
-                    const start = new Date(date);
-                    start.setHours(startHour, startMinute, 0, 0);
-                    
-                    const end = new Date(start);
-                    end.setMinutes(end.getMinutes() + durationMins);
-                    
-                    slots.push({
-                        start: start.toISOString(),
-                        end: end.toISOString(),
-                        status: 'Busy',
-                        subject: `Meeting ${j + 1}`
-                    });
-                }
-            }
-            
-            return slots;
-        }
-
-        function resetMockData() {
-            initializeMockData();
-            showStatus('Mock data reset to defaults', 'connected');
-        }
-
-        function generateRandomData() {
-            generateCalendarData();
-            showStatus('Random calendar data generated', 'connected');
-        }
-
-        function regenerateCalendarData() {
-            generateCalendarData();
-            showStatus('Calendar events regenerated', 'connected');
-        }
-
-        function exportMockData() {
-            const dataStr = JSON.stringify(mockData, null, 2);
-            const dataBlob = new Blob([dataStr], {type: 'application/json'});
-            const url = URL.createObjectURL(dataBlob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'mock-data.json';
-            link.click();
-            URL.revokeObjectURL(url);
-            showStatus('Mock data exported', 'connected');
-        }
-
         function formatAdaptiveCard(content) {
             // Simple adaptive card formatting for display
             if (typeof content === 'object') {
@@ -1317,7 +1172,7 @@ namespace InterviewSchedulingBot.Controllers
         public Activity Activity => _activity;
         public bool Responded { get; private set; }
 
-        public async Task<ResourceResponse> SendActivityAsync(IActivity activity, CancellationToken cancellationToken = default)
+        public Task<ResourceResponse> SendActivityAsync(IActivity activity, CancellationToken cancellationToken = default)
         {
             var activityAsConcrete = activity as Activity;
             var activityToSend = activityAsConcrete ?? new Activity
@@ -1335,7 +1190,7 @@ namespace InterviewSchedulingBot.Controllers
             _responses.Add(activityToSend);
             Responded = true;
 
-            return new ResourceResponse(activityToSend.Id);
+            return Task.FromResult(new ResourceResponse(activityToSend.Id));
         }
 
         public async Task<ResourceResponse> SendActivityAsync(string textReplyToSend, string? speak = null, string? inputHint = null, CancellationToken cancellationToken = default)
@@ -1353,20 +1208,22 @@ namespace InterviewSchedulingBot.Controllers
             return responses.ToArray();
         }
 
-        public async Task<ResourceResponse> UpdateActivityAsync(IActivity activity, CancellationToken cancellationToken = default)
+        public Task<ResourceResponse> UpdateActivityAsync(IActivity activity, CancellationToken cancellationToken = default)
         {
             // Not implemented for testing
-            return new ResourceResponse();
+            return Task.FromResult(new ResourceResponse());
         }
 
-        public async Task DeleteActivityAsync(ConversationReference conversationReference, CancellationToken cancellationToken = default)
+        public Task DeleteActivityAsync(ConversationReference conversationReference, CancellationToken cancellationToken = default)
         {
             // Not implemented for testing
+            return Task.CompletedTask;
         }
 
-        public async Task DeleteActivityAsync(string activityId, CancellationToken cancellationToken = default)
+        public Task DeleteActivityAsync(string activityId, CancellationToken cancellationToken = default)
         {
             // Not implemented for testing
+            return Task.CompletedTask;
         }
 
         public ITurnContext OnSendActivities(SendActivitiesHandler handler)
