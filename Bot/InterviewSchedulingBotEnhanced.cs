@@ -38,6 +38,7 @@ namespace InterviewBot.Bot
         private readonly IConversationStore _conversationStore;
         private readonly ConversationStateManager _stateManager;
         private readonly SlotQueryParser _slotQueryParser;
+        private readonly ConversationalResponseGenerator _conversationalResponseGenerator;
 
         public InterviewSchedulingBotEnhanced(
             IAuthenticationService authService, 
@@ -56,7 +57,8 @@ namespace InterviewBot.Bot
             ICleanOpenWebUIClient cleanOpenWebUIClient,
             IConversationStore conversationStore,
             ConversationStateManager stateManager,
-            SlotQueryParser slotQueryParser)
+            SlotQueryParser slotQueryParser,
+            ConversationalResponseGenerator conversationalResponseGenerator)
         {
             _authService = authService;
             _schedulingBusinessService = schedulingBusinessService;
@@ -74,6 +76,7 @@ namespace InterviewBot.Bot
             _conversationStore = conversationStore;
             _stateManager = stateManager;
             _slotQueryParser = slotQueryParser;
+            _conversationalResponseGenerator = conversationalResponseGenerator;
             
             // Setup dialogs with specific loggers
             _dialogs = new DialogSet(_accessors.DialogStateAccessor);
@@ -248,7 +251,7 @@ namespace InterviewBot.Bot
                 if (parameters.Participants.Any())
                 {
                     var slots = await FindSlotsAsync(parameters);
-                    return GenerateSlotsResponseAsync(slots, parameters, originalMessage);
+                    return await GenerateSlotsResponseAsync(slots, parameters, originalMessage);
                 }
                 
                 // Otherwise generate a general AI response
@@ -314,7 +317,7 @@ namespace InterviewBot.Bot
             }
         }
 
-        private string GenerateSlotsResponseAsync(List<InterviewSchedulingBot.Models.TimeSlot> slots, MeetingParameters parameters, string originalMessage)
+        private async Task<string> GenerateSlotsResponseAsync(List<InterviewSchedulingBot.Models.TimeSlot> slots, MeetingParameters parameters, string originalMessage)
         {
             try
             {
@@ -352,8 +355,8 @@ namespace InterviewBot.Bot
                     SpecificDay = specificDay
                 };
 
-                // Use the fallback response generator to create properly formatted response
-                return GenerateFormattedSlotResponse(rankedSlots, criteria);
+                // Use the enhanced conversational response generator
+                return await _conversationalResponseGenerator.GenerateSlotResponseAsync(rankedSlots, criteria);
             }
             catch (Exception ex)
             {

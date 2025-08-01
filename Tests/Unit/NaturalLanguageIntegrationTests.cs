@@ -26,7 +26,16 @@ namespace InterviewSchedulingBot.Tests.Unit
             // Create services
             var openWebUIClient = new OpenWebUIClient(httpClient, mockConfiguration.Object, mockLogger.Object);
             var slotQueryParser = new SlotQueryParser(openWebUIClient, new Mock<ILogger<SlotQueryParser>>().Object);
-            var responseGenerator = new ConversationalResponseGenerator(openWebUIClient, new Mock<ILogger<ConversationalResponseGenerator>>().Object);
+            
+            // Create mock services for the new dependencies
+            var mockRecommendationService = new Mock<ISlotRecommendationService>();
+            var mockResponseFormatter = new Mock<IResponseFormatter>();
+            
+            var responseGenerator = new ConversationalResponseGenerator(
+                openWebUIClient, 
+                new Mock<ILogger<ConversationalResponseGenerator>>().Object,
+                mockRecommendationService.Object,
+                mockResponseFormatter.Object);
 
             // Test queries
             var testCases = new[]
@@ -73,7 +82,16 @@ namespace InterviewSchedulingBot.Tests.Unit
             mockConfiguration.Setup(x => x["OpenWebUI:ApiKey"]).Returns("");
             
             var openWebUIClient = new OpenWebUIClient(httpClient, mockConfiguration.Object, mockLogger.Object);
-            var responseGenerator = new ConversationalResponseGenerator(openWebUIClient, new Mock<ILogger<ConversationalResponseGenerator>>().Object);
+            
+            // Create mock services for the new dependencies
+            var mockRecommendationService = new Mock<ISlotRecommendationService>();
+            var mockResponseFormatter = new Mock<IResponseFormatter>();
+            
+            var responseGenerator = new ConversationalResponseGenerator(
+                openWebUIClient, 
+                new Mock<ILogger<ConversationalResponseGenerator>>().Object,
+                mockRecommendationService.Object,
+                mockResponseFormatter.Object);
 
             // Create test data
             var slots = new List<InterviewBot.Domain.Entities.RankedTimeSlot>

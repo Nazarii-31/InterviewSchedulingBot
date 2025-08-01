@@ -8,13 +8,19 @@ namespace InterviewSchedulingBot.Services.Business
     {
         private readonly IOpenWebUIClient _openWebUIClient;
         private readonly ILogger<ConversationalResponseGenerator> _logger;
+        private readonly ISlotRecommendationService _recommendationService;
+        private readonly IResponseFormatter _responseFormatter;
         
         public ConversationalResponseGenerator(
             IOpenWebUIClient openWebUIClient, 
-            ILogger<ConversationalResponseGenerator> logger)
+            ILogger<ConversationalResponseGenerator> logger,
+            ISlotRecommendationService recommendationService,
+            IResponseFormatter responseFormatter)
         {
             _openWebUIClient = openWebUIClient;
             _logger = logger;
+            _recommendationService = recommendationService;
+            _responseFormatter = responseFormatter;
         }
         
         public async Task<string> GenerateSlotResponseAsync(
@@ -31,59 +37,77 @@ namespace InterviewSchedulingBot.Services.Business
                     return await GenerateNoSlotsResponseAsync(criteria, cancellationToken);
                 }
 
-                // Group slots by day
-                var slotsByDay = slots
-                    .GroupBy(s => s.StartTime.Date)
-                    .OrderBy(g => g.Key)
-                    .ToDictionary(g => g.Key, g => g.ToList());
+                // Enhance slots with recommendations and explanations
+                var enhancedSlots = _recommendationService.RankAndExplainSlots(slots, criteria);
                 
-                var context = new
+                // Use the formatter for consistent response formatting
+                var formattedResponse = _responseFormatter.FormatSlotResponse(enhancedSlots, criteria);
+                
+                // Try to get AI-enhanced response, but fallback to formatted response
+                try
                 {
-                    Query = new
+                    var bestSlot = _recommendationService.GetBestRecommendedSlot(enhancedSlots);
+                    
+                    var context = new
                     {
-                        TimeOfDay = criteria.TimeOfDay != null 
-                            ? $"{criteria.TimeOfDay.Start:hh\\:mm} - {criteria.TimeOfDay.End:hh\\:mm}"
-                            : "Any time",
-                        SpecificDay = criteria.SpecificDay,
-                        RelativeDay = criteria.RelativeDay,
-                        StartDate = criteria.StartDate.ToString("yyyy-MM-dd"),
-                        EndDate = criteria.EndDate.ToString("yyyy-MM-dd"),
-                        DurationMinutes = criteria.DurationMinutes,
-                        Participants = criteria.ParticipantEmails
-                    },
-                    SlotCount = slots.Count,
-                    DayCount = slotsByDay.Count,
-                    SlotsByDay = slotsByDay.Select(kv => new
-                    {
-                        Date = kv.Key.ToString("yyyy-MM-dd"),
-                        DayOfWeek = kv.Key.DayOfWeek.ToString(),
-                        Slots = kv.Value.Select(s => new
+                        Query = new
                         {
-                            StartTime = s.StartTime.ToString("HH:mm"),
-                            EndTime = s.EndTime.ToString("HH:mm"),
-                            Score = s.Score,
-                            AvailableParticipants = s.AvailableParticipants,
-                            TotalParticipants = s.TotalParticipants
-                        }).ToList()
-                    }).ToList(),
-                    BestSlot = slots.OrderByDescending(s => s.Score).FirstOrDefault()
-                };
-                
-                var prompt = "Generate a conversational response about available interview time slots";
-                var response = await _openWebUIClient.GenerateResponseAsync(prompt, context, cancellationToken);
-                
-                // If Open WebUI is not available, create a fallback response
-                if (string.IsNullOrWhiteSpace(response) || response.Contains("fallback"))
+                            TimeOfDay = criteria.TimeOfDay != null 
+                                ? $"{criteria.TimeOfDay.Start:hh\\:mm} - {criteria.TimeOfDay.End:hh\\:mm}"
+                                : "Any time",
+                            SpecificDay = criteria.SpecificDay,
+                            RelativeDay = criteria.RelativeDay,
+                            StartDate = criteria.StartDate.ToString("yyyy-MM-dd"),
+                            EndDate = criteria.EndDate.ToString("yyyy-MM-dd"),
+                            DurationMinutes = criteria.DurationMinutes,
+                            Participants = criteria.ParticipantEmails
+                        },
+                        SlotCount = enhancedSlots.Count,
+                        FormattedResponse = formattedResponse,
+                        BestSlot = bestSlot != null ? new
+                        {
+                            StartTime = bestSlot.StartTime.ToString("HH:mm"),
+                            EndTime = bestSlot.EndTime.ToString("HH:mm"),
+                            Date = bestSlot.StartTime.ToString("dddd [dd.MM.yyyy]"),
+                            Score = bestSlot.Score,
+                            Explanation = bestSlot.Explanation,
+                            RecommendationReason = bestSlot.RecommendationReason
+                        } : null
+                    };
+                    
+                    var prompt = "Use the provided FormattedResponse exactly as given. This response follows the required formatting standards for interview scheduling.";
+                    var aiResponse = await _openWebUIClient.GenerateResponseAsync(prompt, context, cancellationToken);
+                    
+                    // If AI response is available and doesn't contain fallback indicators, use it
+                    if (!string.IsNullOrWhiteSpace(aiResponse) && 
+                        !aiResponse.Contains("fallback") && 
+                        !aiResponse.Contains("I apologize"))
+                    {
+                        return aiResponse;
+                    }
+                }
+                catch (Exception ex)
                 {
-                    return GenerateFallbackSlotResponse(slots, criteria, slotsByDay);
+                    _logger.LogWarning(ex, "AI enhancement failed, using formatted response");
                 }
                 
-                return response;
+                // Return the consistently formatted response
+                return formattedResponse;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating slot response");
-                return GenerateFallbackSlotResponse(slots, criteria, slots.GroupBy(s => s.StartTime.Date).ToDictionary(g => g.Key, g => g.ToList()));
+                
+                // Emergency fallback using the formatter
+                try
+                {
+                    var enhancedSlots = _recommendationService.RankAndExplainSlots(slots, criteria);
+                    return _responseFormatter.FormatSlotResponse(enhancedSlots, criteria);
+                }
+                catch
+                {
+                    return _responseFormatter.FormatNoSlotsResponse(criteria);
+                }
             }
         }
         
@@ -169,21 +193,8 @@ namespace InterviewSchedulingBot.Services.Business
 
         private async Task<string> GenerateNoSlotsResponseAsync(SlotQueryCriteria criteria, CancellationToken cancellationToken = default)
         {
-            var timeConstraint = criteria.TimeOfDay != null 
-                ? $" in the {criteria.TimeOfDay.Start:hh\\:mm}-{criteria.TimeOfDay.End:hh\\:mm} time range"
-                : "";
-            
-            var dayConstraint = !string.IsNullOrEmpty(criteria.SpecificDay) 
-                ? $" on {criteria.SpecificDay}"
-                : !string.IsNullOrEmpty(criteria.RelativeDay)
-                    ? $" {criteria.RelativeDay}"
-                    : "";
-
-            return $"I couldn't find any available {criteria.DurationMinutes}-minute slots{dayConstraint}{timeConstraint}. " +
-                   "Would you like me to:\n" +
-                   "• Try a different time range or day\n" +
-                   "• Look for shorter meeting durations\n" +
-                   "• Check availability for the following week";
+            // Use the response formatter for consistent no-slots responses
+            return _responseFormatter.FormatNoSlotsResponse(criteria);
         }
 
         private string GenerateFallbackSlotResponse(

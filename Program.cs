@@ -74,6 +74,8 @@ builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.IOpen
 builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ICleanOpenWebUIClient, InterviewSchedulingBot.Services.Integration.CleanOpenWebUIClient>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.SlotQueryParser>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ConversationalResponseGenerator>();
+builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ISlotRecommendationService, InterviewSchedulingBot.Services.Business.SlotRecommendationService>();
+builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.IResponseFormatter, InterviewSchedulingBot.Services.Business.ResponseFormatter>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.IAIResponseService, InterviewSchedulingBot.Services.Business.AIResponseService>();
 
 // Register Conversation Store

@@ -1146,26 +1146,23 @@ namespace InterviewSchedulingBot.Services.Integration
             {
                 case "slot_finding":
                     return @"You are an AI interview scheduling assistant with access to calendar data. 
-                            Your responses should be helpful, clear, and professional. 
-                            When presenting available time slots, you MUST follow this EXACT format:
+                            You will receive a FormattedResponse that contains properly formatted time slots with explanations and recommendations.
                             
-                            1. Start with: 'Here are the available [duration]-minute time slots for [day] [[dd.MM.yyyy]]:'
-                            2. Add blank line followed by day header: '[Day] [[dd.MM.yyyy]]'
-                            3. List each slot with: '- HH:mm - HH:mm' (24-hour format, no spaces around dashes except before the dash)
-                            4. Show ALL available slots for each day
-                            5. Use quarter-hour aligned times only (00, 15, 30, 45 minutes)
-                            6. Use English day names and dd.MM.yyyy date format
+                            CRITICAL INSTRUCTIONS:
+                            1. Use the FormattedResponse EXACTLY as provided - do not modify the format
+                            2. The response already includes proper date formatting, explanations, and recommendations
+                            3. Do not change any part of the formatting, time displays, or structure
+                            4. Simply return the FormattedResponse as your complete answer
+                            5. Do not add additional commentary or modify the content
                             
-                            EXAMPLE FORMAT:
-                            'Here are the available 30-minute time slots for Monday [04.08.2025]:
+                            The FormattedResponse follows the exact format requirements:
+                            - Dates in 'Monday [04.08.2025]' format
+                            - Times in 'HH:mm - HH:mm' format with quarter-hour alignment
+                            - Explanations after each slot
+                            - ⭐ RECOMMENDED markers for best slots
+                            - Professional closing message
                             
-                            Monday [04.08.2025]
-                            - 09:00 - 09:30
-                            - 10:15 - 10:45
-                            - 14:30 - 15:00'
-                            
-                            CRITICAL: Use this EXACT formatting. Do not deviate from this structure.
-                            Never respond with generic messages about finding slots without including the actual time slots.";
+                            Your job is to present this information exactly as formatted.";
                             
                 case "general":
                     return @"You are an AI-powered interview scheduling assistant. Your personality is helpful, 
