@@ -19,6 +19,7 @@ using InterviewBot.Models;
 using InterviewBot.Services;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InterviewBot.Bot
 {
@@ -865,41 +866,53 @@ namespace InterviewBot.Bot
         // New methods for handling slot requests with deterministic behavior
         private async Task HandleSlotRequestAsync(ITurnContext<IMessageActivity> turnContext, string message, CancellationToken cancellationToken)
         {
-            // Extract emails
-            var emails = ExtractEmailsFromMessage(message);
-            if (!emails.Any())
+            try
             {
-                await turnContext.SendActivityAsync("I couldn't find any email addresses in your request. Please include participant emails.");
-                return;
+                // Extract emails
+                var emails = ExtractEmailsFromMessage(message);
+                if (!emails.Any())
+                {
+                    await turnContext.SendActivityAsync("I couldn't find any email addresses in your request. Please include participant emails.");
+                    return;
+                }
+                
+                // Extract duration
+                int duration = ExtractDurationFromMessage(message);
+                
+                // Use robust AI-driven date interpretation
+                var aiDateInterpreter = new AIDateInterpreter(_openWebUIIntegration, 
+                    _logger as ILogger<AIDateInterpreter> ?? new NullLogger<AIDateInterpreter>());
+                
+                var dateInterpretation = await aiDateInterpreter.InterpretDateReferenceAsync(message, DateTime.Now);
+                
+                _logger.LogInformation("Date interpretation result: {StartDate} to {EndDate}, WasAdjusted: {WasAdjusted}, Explanation: {Explanation}", 
+                    dateInterpretation.StartDate, dateInterpretation.EndDate, dateInterpretation.WasAdjusted, dateInterpretation.Explanation);
+                
+                // Generate initial limited set of best time slots
+                var enhancedSlots = _deterministicSlotService.GenerateConsistentTimeSlots(
+                    dateInterpretation.StartDate,
+                    dateInterpretation.EndDate,
+                    duration,
+                    emails,
+                    maxInitialResults: 5); // Show fewer initial options
+                    
+                // Use AI-driven conversational response formatting
+                string response = await _conversationalAIResponseFormatter.FormatTimeSlotResponseAsync(
+                    enhancedSlots,
+                    dateInterpretation.StartDate,
+                    dateInterpretation.EndDate,
+                    duration,
+                    message,
+                    dateInterpretation.WasAdjusted,
+                    dateInterpretation.Explanation);
+                    
+                await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
             }
-            
-            // Extract duration
-            int duration = ExtractDurationFromMessage(message);
-            
-            // Use pure AI-driven natural language date processor
-            var dateRange = await _openWebUIIntegration.ProcessDateReferenceAsync(message, DateTime.Now);
-            
-            // Check if date was adjusted from weekend to business day
-            bool wasWeekendAdjusted = await CheckIfWeekendWasAdjustedAsync(message, dateRange, DateTime.Now);
-            
-            // Generate initial limited set of best time slots
-            var enhancedSlots = _deterministicSlotService.GenerateConsistentTimeSlots(
-                dateRange.startDate,
-                dateRange.endDate,
-                duration,
-                emails,
-                maxInitialResults: 5); // Show fewer initial options
-                
-            // Use AI-driven conversational response formatting
-            string response = await _conversationalAIResponseFormatter.FormatTimeSlotResponseAsync(
-                enhancedSlots,
-                dateRange.startDate,
-                dateRange.endDate,
-                duration,
-                message,
-                wasWeekendAdjusted);
-                
-            await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in HandleSlotRequestAsync for message: {Message}", message);
+                await turnContext.SendActivityAsync("I encountered an error processing your scheduling request. Please try again with a different format.");
+            }
         }
         
         /// <summary>

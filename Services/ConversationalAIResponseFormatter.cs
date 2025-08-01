@@ -36,16 +36,17 @@ namespace InterviewBot.Services
             DateTime endDate,
             int durationMinutes,
             string originalRequest,
-            bool wasWeekendAdjusted = false)
+            bool wasWeekendAdjusted = false,
+            string explanation = "")
         {
             try
             {
                 if (!slots.Any())
                 {
-                    return await GenerateNoSlotsResponseAsync(startDate, endDate, durationMinutes, originalRequest, wasWeekendAdjusted);
+                    return await GenerateNoSlotsResponseAsync(startDate, endDate, durationMinutes, originalRequest, wasWeekendAdjusted, explanation);
                 }
                 
-                return await GenerateSlotListResponseAsync(slots, startDate, endDate, durationMinutes, originalRequest, wasWeekendAdjusted);
+                return await GenerateSlotListResponseAsync(slots, startDate, endDate, durationMinutes, originalRequest, wasWeekendAdjusted, explanation);
             }
             catch (Exception ex)
             {
@@ -62,7 +63,8 @@ namespace InterviewBot.Services
             DateTime endDate,
             int durationMinutes,
             string originalRequest,
-            bool wasWeekendAdjusted)
+            bool wasWeekendAdjusted,
+            string explanation = "")
         {
             var context = new
             {
@@ -71,6 +73,7 @@ namespace InterviewBot.Services
                 StartDate = DateFormattingService.FormatDateWithDay(startDate),
                 EndDate = DateFormattingService.FormatDateWithDay(endDate),
                 WasAdjusted = wasWeekendAdjusted,
+                Explanation = explanation,
                 ResponseType = "no_slots_available"
             };
             
@@ -81,6 +84,7 @@ CONTEXT:
 - Looking for {durationMinutes}-minute slots
 - Between {context.StartDate} and {context.EndDate}
 - Weekend adjustment made: {wasWeekendAdjusted}
+- Explanation: {explanation}
 
 REQUIREMENTS:
 - Be conversational and helpful
@@ -97,8 +101,8 @@ Generate a response that acknowledges their request and offers helpful alternati
                 await _aiClient.ExtractParametersAsync(aiRequest);
                 
                 // For now, create a conversational template but this would be AI-generated
-                var response = wasWeekendAdjusted ?
-                    $"I noticed you asked for slots starting tomorrow, but since tomorrow is a weekend, I checked the next business days instead. Unfortunately, I couldn't find any suitable {durationMinutes}-minute slots between {context.StartDate} and {context.EndDate}. Would you like me to:\n\n" +
+                var response = wasWeekendAdjusted || !string.IsNullOrEmpty(explanation) ?
+                    $"{explanation} Unfortunately, I couldn't find any suitable {durationMinutes}-minute slots between {context.StartDate} and {context.EndDate}. Would you like me to:\n\n" +
                     "• Check different dates (perhaps later next week)?\n" +
                     "• Try a shorter meeting duration?\n" +
                     "• Look at different times of day?\n\n" +
@@ -128,12 +132,13 @@ Generate a response that acknowledges their request and offers helpful alternati
             DateTime endDate,
             int durationMinutes,
             string originalRequest,
-            bool wasWeekendAdjusted)
+            bool wasWeekendAdjusted,
+            string explanation = "")
         {
             var sb = new StringBuilder();
             
             // AI-generated opening (simplified for now)
-            var opening = await GenerateOpeningLineAsync(startDate, endDate, durationMinutes, originalRequest, wasWeekendAdjusted);
+            var opening = await GenerateOpeningLineAsync(startDate, endDate, durationMinutes, originalRequest, wasWeekendAdjusted, explanation);
             sb.AppendLine(opening);
             sb.AppendLine();
             
@@ -175,12 +180,18 @@ Generate a response that acknowledges their request and offers helpful alternati
             DateTime endDate,
             int durationMinutes,
             string originalRequest,
-            bool wasWeekendAdjusted)
+            bool wasWeekendAdjusted,
+            string explanation = "")
         {
             try
             {
                 bool isSingleDay = startDate.Date == endDate.Date;
                 bool isLimitedDays = (endDate.Date - startDate.Date).Days < 4 && originalRequest.ToLower().Contains("first");
+                
+                if (wasWeekendAdjusted && !string.IsNullOrEmpty(explanation))
+                {
+                    return $"{explanation}. I've found the following {durationMinutes}-minute time slots for the next business days:";
+                }
                 
                 if (wasWeekendAdjusted)
                 {
