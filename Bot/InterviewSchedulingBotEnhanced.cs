@@ -14,6 +14,8 @@ using InterviewSchedulingBot.Services.Business;
 using InterviewSchedulingBot.Services.Integration;
 using InterviewSchedulingBot.Services;
 using InterviewSchedulingBot.Models;
+using InterviewBot.Domain.Entities;
+using System.Globalization;
 
 namespace InterviewBot.Bot
 {
@@ -246,7 +248,7 @@ namespace InterviewBot.Bot
                 if (parameters.Participants.Any())
                 {
                     var slots = await FindSlotsAsync(parameters);
-                    return await GenerateSlotsResponseAsync(slots, parameters, originalMessage);
+                    return GenerateSlotsResponseAsync(slots, parameters, originalMessage);
                 }
                 
                 // Otherwise generate a general AI response
@@ -312,50 +314,46 @@ namespace InterviewBot.Bot
             }
         }
 
-        private async Task<string> GenerateSlotsResponseAsync(List<InterviewSchedulingBot.Models.TimeSlot> slots, MeetingParameters parameters, string originalMessage)
+        private string GenerateSlotsResponseAsync(List<InterviewSchedulingBot.Models.TimeSlot> slots, MeetingParameters parameters, string originalMessage)
         {
             try
             {
                 if (!slots.Any())
                 {
-                    var noSlotsPrompt = $"Generate a response explaining that no suitable time slots were found for a {parameters.Duration}-minute meeting with {parameters.Participants.Count} participants for {parameters.TimeFrame}. Suggest alternatives.";
-                    var noSlotsContext = new { parameters, originalMessage };
-                    
-                    var noSlotsResponse = await _openWebUIClient.GenerateResponseAsync(noSlotsPrompt, noSlotsContext);
-                    return noSlotsResponse;
+                    return "I couldn't find any available slots matching your criteria.";
                 }
 
-                // Determine the date range for the slots
-                var startDate = slots.Min(s => s.StartTime).Date;
-                var endDate = slots.Max(s => s.StartTime).Date;
-                var dateRangeText = startDate == endDate 
-                    ? $"for {startDate:dddd, MMM d, yyyy}" 
-                    : $"for {startDate:MMM d} - {endDate:MMM d, yyyy}";
-
-                // Generate AI response with slot details including date range
-                var slotsPrompt = $@"I found {slots.Count} available time slots {dateRangeText} for a {parameters.Duration}-minute meeting. 
-                                   Generate a response that mentions the calendar was scanned for all participants: {string.Join(", ", parameters.Participants)}.
-                                   Present the time slots with specific times and mention which participants are available for each slot. 
-                                   Use natural language and end with asking which slot they prefer.";
-                
-                var slotsContext = new
+                // Convert TimeSlot to RankedTimeSlot for the response generator
+                var rankedSlots = slots.Select(slot => new RankedTimeSlot
                 {
-                    dateRange = dateRangeText,
-                    slots = slots.Select(s => new
-                    {
-                        startTime = s.StartTime.ToString("dddd, MMM d 'at' h:mm tt"),
-                        endTime = s.EndTime.ToString("h:mm tt"),
-                        availableParticipants = s.AvailableParticipants.Count,
-                        totalParticipants = s.TotalParticipants,
-                        participants = s.AvailableParticipants,
-                        conflicts = parameters.Participants.Except(s.AvailableParticipants).ToList()
-                    }),
-                    parameters,
-                    originalMessage
+                    StartTime = slot.StartTime,
+                    EndTime = slot.EndTime,
+                    Score = slot.AvailabilityScore,
+                    AvailableParticipants = slot.AvailableParticipants.Count,
+                    TotalParticipants = slot.TotalParticipants,
+                    UnavailableParticipants = new List<ParticipantConflict>()
+                }).ToList();
+
+                // Parse time frame to determine criteria
+                var startDate = ParseTimeFrame(parameters.TimeFrame);
+                var endDate = startDate.AddDays(7);
+                
+                // Determine relative day from original message
+                var relativeDay = ExtractRelativeDay(originalMessage, parameters.TimeFrame);
+                var specificDay = ExtractSpecificDay(originalMessage);
+                
+                var criteria = new SlotQueryCriteria
+                {
+                    StartDate = startDate,
+                    EndDate = endDate,
+                    ParticipantEmails = parameters.Participants,
+                    DurationMinutes = parameters.Duration,
+                    RelativeDay = relativeDay,
+                    SpecificDay = specificDay
                 };
 
-                var response = await _openWebUIClient.GenerateResponseAsync(slotsPrompt, slotsContext);
-                return response;
+                // Use the fallback response generator to create properly formatted response
+                return GenerateFormattedSlotResponse(rankedSlots, criteria);
             }
             catch (Exception ex)
             {
@@ -696,6 +694,160 @@ namespace InterviewBot.Bot
         {
             _logger.LogInformation("Unrecognized activity type: {ActivityType}", turnContext.Activity.Type);
             await base.OnUnrecognizedActivityTypeAsync(turnContext, cancellationToken);
+        }
+
+        private string ExtractRelativeDay(string originalMessage, string timeFrame)
+        {
+            var lowerMessage = originalMessage.ToLowerInvariant();
+            
+            if (lowerMessage.Contains("tomorrow"))
+                return "tomorrow";
+            else if (lowerMessage.Contains("next week"))
+                return "next week";
+            else if (lowerMessage.Contains("next month"))
+                return "next month";
+            
+            return timeFrame;
+        }
+
+        private string? ExtractSpecificDay(string originalMessage)
+        {
+            var lowerMessage = originalMessage.ToLowerInvariant();
+            
+            if (lowerMessage.Contains("monday"))
+                return "monday";
+            else if (lowerMessage.Contains("tuesday"))
+                return "tuesday";
+            else if (lowerMessage.Contains("wednesday"))
+                return "wednesday";
+            else if (lowerMessage.Contains("thursday"))
+                return "thursday";
+            else if (lowerMessage.Contains("friday"))
+                return "friday";
+            else if (lowerMessage.Contains("saturday"))
+                return "saturday";
+            else if (lowerMessage.Contains("sunday"))
+                return "sunday";
+            
+            return null;
+        }
+
+        private string GenerateFormattedSlotResponse(List<RankedTimeSlot> slots, SlotQueryCriteria criteria)
+        {
+            if (!slots.Any())
+                return "I couldn't find any available slots matching your criteria.";
+
+            var response = new List<string>();
+            var englishCulture = CultureInfo.GetCultureInfo("en-US");
+            
+            // Ensure all slots start at quarter hours (00, 15, 30, 45)
+            var quarterHourSlots = slots.Where(slot => slot.StartTime.Minute % 15 == 0).ToList();
+            
+            // Group slots by day
+            var slotsByDay = quarterHourSlots
+                .GroupBy(s => s.StartTime.Date)
+                .OrderBy(g => g.Key)
+                .ToDictionary(g => g.Key, g => g.ToList());
+            
+            // Add information about the requested time period
+            var timeRangeInfo = GetRequestedTimeRangeInfo(criteria);
+            
+            response.Add($"Here are the available {criteria.DurationMinutes}-minute time slots{timeRangeInfo}:");
+            
+            // Display all days with their slots
+            foreach (var dayGroup in slotsByDay.OrderBy(kvp => kvp.Key))
+            {
+                var day = dayGroup.Key;
+                var dayName = day.ToString("dddd", englishCulture);
+                var dateStr = day.ToString("dd.MM.yyyy", englishCulture);
+                
+                // Add day header with format "Monday [04.08.2025]"
+                response.Add($"\n\n{dayName} [{dateStr}]");
+                
+                // Add all slots for this day
+                var daySlots = dayGroup.Value.OrderBy(s => s.StartTime).ToList();
+                foreach (var slot in daySlots)
+                {
+                    var startTimeStr = slot.StartTime.ToString("HH:mm", englishCulture);
+                    var endTimeStr = slot.EndTime.ToString("HH:mm", englishCulture);
+                    response.Add($"\n    - {startTimeStr} - {endTimeStr}");
+                }
+            }
+            
+            response.Add("\n\nPlease let me know which time slot works best for you.");
+            
+            return string.Join("", response);
+        }
+
+        private string GetRequestedTimeRangeInfo(SlotQueryCriteria criteria)
+        {
+            var timeInfo = "";
+            var englishCulture = CultureInfo.GetCultureInfo("en-US");
+            
+            // Add specific day information with exact date
+            if (!string.IsNullOrEmpty(criteria.SpecificDay))
+            {
+                // Find the actual date for the specific day
+                var requestedDayOfWeek = ParseDayOfWeek(criteria.SpecificDay);
+                if (requestedDayOfWeek.HasValue)
+                {
+                    var today = DateTime.Today;
+                    var daysUntilRequested = ((int)requestedDayOfWeek.Value - (int)today.DayOfWeek + 7) % 7;
+                    if (daysUntilRequested == 0 && DateTime.Now.Hour >= 17) daysUntilRequested = 7; // If it's the same day but late, assume next week
+                    var requestedDate = today.AddDays(daysUntilRequested);
+                    timeInfo += $" for {criteria.SpecificDay} [{requestedDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else
+                {
+                    timeInfo += $" for {criteria.SpecificDay}";
+                }
+            }
+            else if (!string.IsNullOrEmpty(criteria.RelativeDay))
+            {
+                if (criteria.RelativeDay.ToLower().Contains("tomorrow"))
+                {
+                    // For "tomorrow", format as "Monday [04.08.2025]" (no mention of "tomorrow")
+                    var tomorrow = criteria.StartDate;
+                    var dayName = tomorrow.ToString("dddd", englishCulture);
+                    timeInfo += $" for {dayName} [{tomorrow.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else if (criteria.RelativeDay.ToLower().Contains("week"))
+                {
+                    timeInfo += $" for {criteria.RelativeDay} [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)} - {criteria.EndDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else
+                {
+                    timeInfo += $" for {criteria.RelativeDay} [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+            }
+            else if (criteria.StartDate != DateTime.MinValue && criteria.EndDate != DateTime.MinValue)
+            {
+                if (criteria.StartDate.Date == criteria.EndDate.Date)
+                {
+                    timeInfo += $" for [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+                else
+                {
+                    timeInfo += $" between [{criteria.StartDate.ToString("dd.MM.yyyy", englishCulture)}] and [{criteria.EndDate.ToString("dd.MM.yyyy", englishCulture)}]";
+                }
+            }
+            
+            return timeInfo;
+        }
+
+        private DayOfWeek? ParseDayOfWeek(string dayName)
+        {
+            return dayName?.ToLowerInvariant() switch
+            {
+                "monday" => DayOfWeek.Monday,
+                "tuesday" => DayOfWeek.Tuesday,
+                "wednesday" => DayOfWeek.Wednesday,
+                "thursday" => DayOfWeek.Thursday,
+                "friday" => DayOfWeek.Friday,
+                "saturday" => DayOfWeek.Saturday,
+                "sunday" => DayOfWeek.Sunday,
+                _ => null
+            };
         }
     }
 }
