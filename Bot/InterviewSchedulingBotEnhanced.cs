@@ -770,7 +770,7 @@ namespace InterviewBot.Bot
                 {
                     var startTimeStr = slot.StartTime.ToString("HH:mm", englishCulture);
                     var endTimeStr = slot.EndTime.ToString("HH:mm", englishCulture);
-                    response.Add($"\n    - {startTimeStr} - {endTimeStr}");
+                    response.Add($"\n- {startTimeStr} - {endTimeStr}");
                 }
             }
             

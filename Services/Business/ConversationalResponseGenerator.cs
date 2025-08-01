@@ -243,7 +243,7 @@ namespace InterviewSchedulingBot.Services.Business
                 // Add day header with format "Monday [04.08.2025]"
                 response.Add($"\n\n{dayName} [{dateStr}]");
                 
-                // Add all slots for this day in quarter-hour increments
+                // Add all slots for this day
                 var daySlots = dayGroup.Value.OrderBy(s => s.StartTime).ToList();
                 if (daySlots.Any())
                 {
@@ -251,12 +251,12 @@ namespace InterviewSchedulingBot.Services.Business
                     {
                         var startTimeStr = slot.StartTime.ToString("HH:mm", englishCulture);
                         var endTimeStr = slot.EndTime.ToString("HH:mm", englishCulture);
-                        response.Add($"\n    - {startTimeStr} - {endTimeStr}");
+                        response.Add($"\n- {startTimeStr} - {endTimeStr}");
                     }
                 }
                 else
                 {
-                    response.Add("\n    - No available slots");
+                    response.Add("\n- No available slots");
                 }
             }
             
@@ -269,8 +269,6 @@ namespace InterviewSchedulingBot.Services.Business
             {
                 response.Add("\n\nPlease let me know which time slot works best for you.");
             }
-            
-            response.Add("\n\nPlease let me know which time slot works best for you.");
             
             return string.Join("", response);
         }
