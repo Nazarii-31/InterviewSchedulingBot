@@ -60,20 +60,29 @@ namespace InterviewSchedulingBot.Services.Integration
             
             if (!_useMockData && !string.IsNullOrEmpty(baseUrl))
             {
-                _httpClient.BaseAddress = new Uri(baseUrl);
-                
-                // Add API key if your instance requires it
-                var apiKey = configuration["OpenWebUI:ApiKey"];
-                if (!string.IsNullOrEmpty(apiKey))
+                try
                 {
-                    _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                    _httpClient.BaseAddress = new Uri(baseUrl);
+                    
+                    // Add API key if your instance requires it
+                    var apiKey = configuration["OpenWebUI:ApiKey"];
+                    if (!string.IsNullOrEmpty(apiKey))
+                    {
+                        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+                    }
+                    
+                    // Configure model - use mistral:7b as recommended
+                    _selectedModel = configuration["OpenWebUI:Model"] ?? "mistral:7b";
+                    
+                    _logger.LogInformation("OpenWebUI client configured for self-hosted instance at: {BaseUrl} using model: {Model}", 
+                        baseUrl, _selectedModel);
                 }
-                
-                // Configure model - use mistral:7b as recommended
-                _selectedModel = configuration["OpenWebUI:Model"] ?? "mistral:7b";
-                
-                _logger.LogInformation("OpenWebUI client configured for self-hosted instance at: {BaseUrl} using model: {Model}", 
-                    baseUrl, _selectedModel);
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to configure OpenWebUI client with BaseUrl: {BaseUrl} - using mock data", baseUrl);
+                    _useMockData = true;
+                    _selectedModel = configuration["OpenWebUI:Model"] ?? "mistral:7b";
+                }
             }
             else
             {
@@ -725,22 +734,22 @@ namespace InterviewSchedulingBot.Services.Integration
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
             
+            // If using mock data or OpenWebUI is not properly configured, return fallback immediately
+            if (_useMockData)
+            {
+                _logger.LogDebug("Using mock data for response generation");
+                return CreateFallbackTextResponse(context);
+            }
+            
             // Check if OpenWebUI is properly configured
             var baseUrl = _configuration["OpenWebUI:BaseUrl"];
             var apiKey = _configuration["OpenWebUI:ApiKey"];
             
-            if (string.IsNullOrWhiteSpace(baseUrl))
+            if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(apiKey))
             {
-                var error = "OpenWebUI BaseUrl is not configured. Please check your appsettings.json file.";
-                _logger.LogError(error);
-                throw new InvalidOperationException(error);
-            }
-            
-            if (string.IsNullOrWhiteSpace(apiKey))
-            {
-                var error = "OpenWebUI ApiKey is not configured. Please check your appsettings.json file.";
-                _logger.LogError(error);
-                throw new InvalidOperationException(error);
+                _logger.LogWarning("OpenWebUI configuration missing (BaseUrl: {HasBaseUrl}, ApiKey: {HasApiKey}) - using fallback response", 
+                    !string.IsNullOrWhiteSpace(baseUrl), !string.IsNullOrWhiteSpace(apiKey));
+                return CreateFallbackTextResponse(context);
             }
             
             try
@@ -782,50 +791,45 @@ namespace InterviewSchedulingBot.Services.Integration
                 if (!response.IsSuccessStatusCode)
                 {
                     var errorContent = await response.Content.ReadAsStringAsync(cts.Token);
-                    var error = $"OpenWebUI API request failed with status {response.StatusCode}: {errorContent}";
-                    _logger.LogError(error);
-                    throw new HttpRequestException(error);
+                    _logger.LogWarning("OpenWebUI API request failed with status {StatusCode}: {ErrorContent} - using fallback", 
+                        response.StatusCode, errorContent);
+                    return CreateFallbackTextResponse(context);
                 }
                 
                 var responseContent = await response.Content.ReadAsStringAsync(cts.Token);
                 
                 if (string.IsNullOrWhiteSpace(responseContent))
                 {
-                    var error = "OpenWebUI API returned empty response";
-                    _logger.LogError(error);
-                    throw new InvalidOperationException(error);
+                    _logger.LogWarning("OpenWebUI API returned empty response - using fallback");
+                    return CreateFallbackTextResponse(context);
                 }
                 
                 var responseObj = JsonSerializer.Deserialize<JsonElement>(responseContent);
                 
                 if (!responseObj.TryGetProperty("choices", out var choicesElement) || choicesElement.GetArrayLength() == 0)
                 {
-                    var error = "OpenWebUI API response missing choices array";
-                    _logger.LogError(error);
-                    throw new InvalidOperationException(error);
+                    _logger.LogWarning("OpenWebUI API response missing choices array - using fallback");
+                    return CreateFallbackTextResponse(context);
                 }
                 
                 var firstChoice = choicesElement[0];
                 if (!firstChoice.TryGetProperty("message", out var messageElement))
                 {
-                    var error = "OpenWebUI API response missing message in first choice";
-                    _logger.LogError(error);
-                    throw new InvalidOperationException(error);
+                    _logger.LogWarning("OpenWebUI API response missing message in first choice - using fallback");
+                    return CreateFallbackTextResponse(context);
                 }
                 
                 if (!messageElement.TryGetProperty("content", out var contentElement))
                 {
-                    var error = "OpenWebUI API response missing content in message";
-                    _logger.LogError(error);
-                    throw new InvalidOperationException(error);
+                    _logger.LogWarning("OpenWebUI API response missing content in message - using fallback");
+                    return CreateFallbackTextResponse(context);
                 }
                 
                 var result = contentElement.GetString();
                 if (string.IsNullOrWhiteSpace(result))
                 {
-                    var error = "OpenWebUI API returned empty content";
-                    _logger.LogError(error);
-                    throw new InvalidOperationException(error);
+                    _logger.LogWarning("OpenWebUI API returned empty content - using fallback");
+                    return CreateFallbackTextResponse(context);
                 }
                 
                 _logger.LogInformation("Generated response in {ElapsedMs}ms", stopwatch.ElapsedMilliseconds);
@@ -833,27 +837,23 @@ namespace InterviewSchedulingBot.Services.Integration
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                var error = "Response generation was cancelled by user";
-                _logger.LogWarning(error);
-                throw new InvalidOperationException(error);
+                _logger.LogInformation("Response generation was cancelled by user - using fallback");
+                return CreateFallbackTextResponse(context);
             }
             catch (OperationCanceledException)
             {
-                var error = "Response generation timed out. Please check your OpenWebUI server connectivity.";
-                _logger.LogError(error);
-                throw new TimeoutException(error);
+                _logger.LogWarning("Response generation timed out - using fallback");
+                return CreateFallbackTextResponse(context);
             }
             catch (HttpRequestException ex)
             {
-                var error = $"Network error connecting to OpenWebUI API: {ex.Message}";
-                _logger.LogError(ex, error);
-                throw new InvalidOperationException(error, ex);
+                _logger.LogError(ex, "Network error connecting to OpenWebUI API - using fallback");
+                return CreateFallbackTextResponse(context);
             }
             catch (Exception ex)
             {
-                var error = $"Unexpected error generating response with OpenWebUI API: {ex.Message}";
-                _logger.LogError(ex, error);
-                throw new InvalidOperationException(error, ex);
+                _logger.LogError(ex, "Unexpected error generating response with OpenWebUI API - using fallback");
+                return CreateFallbackTextResponse(context);
             }
         }
 

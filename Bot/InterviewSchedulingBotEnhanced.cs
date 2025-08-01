@@ -252,12 +252,16 @@ namespace InterviewBot.Bot
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate welcome response using OpenWebUI API");
+                _logger.LogWarning(ex, "Failed to generate welcome response using OpenWebUI API - using fallback");
                 
-                // Send detailed error message to user about API connectivity
-                return $"⚠️ **System Error**: Unable to connect to AI service. Please check that OpenWebUI is properly configured and accessible.\n\n" +
-                       $"**Error Details**: {ex.Message}\n\n" +
-                       "Please contact your system administrator to resolve this issue.";
+                // Use a professional fallback welcome message
+                return "Hello! 👋 Welcome to the Interview Scheduling Bot.\n\n" +
+                       "I'm your AI-powered scheduling assistant, here to help you:\n" +
+                       "• Find available time slots using natural language\n" +
+                       "• Schedule interviews and meetings\n" +
+                       "• Check calendar availability for multiple participants\n" +
+                       "• Analyze scheduling conflicts and suggest alternatives\n\n" +
+                       "Just tell me what you need in plain English. How can I help you today?";
             }
         }
 
@@ -286,12 +290,52 @@ namespace InterviewBot.Bot
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate response using OpenWebUI API");
+                _logger.LogWarning(ex, "Failed to generate response using OpenWebUI API - using fallback");
                 
-                return $"⚠️ **System Error**: Unable to connect to AI service to process your request.\n\n" +
-                       $"**Error Details**: {ex.Message}\n\n" +
-                       "Please contact your system administrator to resolve this issue.";
+                // Generate a contextual fallback response based on the user's message
+                return GenerateContextualFallbackResponse(originalMessage, parameters);
             }
+        }
+
+        private string GenerateContextualFallbackResponse(string userMessage, MeetingParameters parameters)
+        {
+            var lowerMessage = userMessage.ToLowerInvariant();
+
+            // Handle greetings
+            if (lowerMessage.Contains("hello") || lowerMessage.Contains("hi") || lowerMessage.Contains("hey"))
+            {
+                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots and check calendar availability using natural language. What would you like me to help you with today?";
+            }
+
+            // Handle help requests
+            if (lowerMessage.Contains("help") || lowerMessage.Contains("what can you do"))
+            {
+                return "I can help you with interview scheduling! Here's what I can do:\n\n" +
+                       "• Find available time slots using natural language\n" +
+                       "• Check calendar availability for multiple participants\n" +
+                       "• Analyze scheduling conflicts\n" +
+                       "• Suggest optimal meeting times\n\n" +
+                       "Just ask me in plain English what you need!";
+            }
+
+            // Handle scheduling-related queries
+            if (lowerMessage.Contains("slots") || lowerMessage.Contains("available") || lowerMessage.Contains("time") || lowerMessage.Contains("schedule"))
+            {
+                return "I'd be happy to help you find available time slots! Could you please tell me more details like:\n\n" +
+                       "• When would you like to check availability?\n" +
+                       "• How long should the meeting be?\n" +
+                       "• Who should be included?\n\n" +
+                       "For example, you could say 'Find slots tomorrow morning' or 'Check availability for a 1-hour meeting next week'.";
+            }
+
+            // Handle thank you
+            if (lowerMessage.Contains("thank") || lowerMessage.Contains("thanks"))
+            {
+                return "You're welcome! I'm here to help with finding availability and checking schedules. Is there anything else you'd like me to assist you with?";
+            }
+
+            // Default response
+            return "I'm here to help with interview scheduling! You can ask me to find time slots, schedule meetings, or check availability using natural language. How can I assist you today?";
         }
 
         private async Task<List<InterviewSchedulingBot.Models.TimeSlot>> FindSlotsAsync(MeetingParameters parameters)
@@ -346,7 +390,8 @@ namespace InterviewBot.Bot
             {
                 if (!slots.Any())
                 {
-                    return "I couldn't find any available slots matching your criteria.";
+                    return "I couldn't find any available slots matching your criteria. " +
+                           "You might want to try a different time range or consider fewer participants.";
                 }
 
                 // Convert TimeSlot to RankedTimeSlot for the response generator
@@ -383,11 +428,32 @@ namespace InterviewBot.Bot
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate slots response using OpenWebUI API");
+                _logger.LogWarning(ex, "Failed to generate slots response using OpenWebUI API - using fallback");
                 
-                return $"⚠️ **System Error**: Unable to connect to AI service to format the scheduling response.\n\n" +
-                       $"**Error Details**: {ex.Message}\n\n" +
-                       "Please contact your system administrator to resolve this issue.";
+                // Generate a simple fallback response for slots
+                if (!slots.Any())
+                {
+                    return "I couldn't find any available slots matching your criteria.";
+                }
+
+                var response = $"✨ I found {slots.Count} available time slot{(slots.Count > 1 ? "s" : "")} for you:\n\n";
+                
+                foreach (var slot in slots.Take(5)) // Show first 5 slots
+                {
+                    response += $"• {slot.StartTime:dddd, MMMM d} at {slot.StartTime:h:mm tt} - {slot.EndTime:h:mm tt}\n";
+                    if (slot.AvailableParticipants.Any())
+                    {
+                        response += $"  ({slot.AvailableParticipants.Count}/{slot.TotalParticipants} participants available)\n";
+                    }
+                }
+                
+                if (slots.Count > 5)
+                {
+                    response += $"\n...and {slots.Count - 5} more available slots.";
+                }
+                
+                response += "\n\nWould you like me to check other time options or show you different availability?";
+                return response;
             }
         }
 
