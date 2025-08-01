@@ -91,6 +91,10 @@ builder.Services.AddSingleton<BotStateAccessors>();
 builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ISimpleOpenWebUIParameterExtractor, InterviewSchedulingBot.Services.Integration.SimpleOpenWebUIParameterExtractor>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ICleanMockDataGenerator, InterviewSchedulingBot.Services.Business.CleanMockDataGenerator>();
 
+// Register new deterministic slot generation services
+builder.Services.AddSingleton<InterviewBot.Services.DeterministicSlotRecommendationService>();
+builder.Services.AddSingleton<InterviewBot.Services.TimeSlotResponseFormatter>();
+
 // === EXISTING SERVICES ===
 
 // Add services to the container.
