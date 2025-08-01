@@ -22,6 +22,7 @@ using InterviewBot.Infrastructure.Caching;
 using InterviewBot.Infrastructure.Telemetry;
 using InterviewBot.Bot.State;
 using InterviewBot.Bot;
+using InterviewBot.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -90,6 +91,10 @@ builder.Services.AddSingleton<BotStateAccessors>();
 // Register Clean Services
 builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ISimpleOpenWebUIParameterExtractor, InterviewSchedulingBot.Services.Integration.SimpleOpenWebUIParameterExtractor>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ICleanMockDataGenerator, InterviewSchedulingBot.Services.Business.CleanMockDataGenerator>();
+
+// Register new enhanced slot services
+builder.Services.AddSingleton<InterviewBot.Services.SlotRecommendationService>();
+builder.Services.AddSingleton<InterviewBot.Services.SlotResponseFormatter>();
 
 // === EXISTING SERVICES ===
 

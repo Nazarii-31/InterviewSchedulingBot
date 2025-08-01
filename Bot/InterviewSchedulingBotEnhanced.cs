@@ -16,6 +16,8 @@ using InterviewSchedulingBot.Services;
 using InterviewSchedulingBot.Models;
 using InterviewBot.Domain.Entities;
 using System.Globalization;
+using InterviewBot.Services;
+using InterviewBot.Models;
 
 namespace InterviewBot.Bot
 {
@@ -39,6 +41,8 @@ namespace InterviewBot.Bot
         private readonly ConversationStateManager _stateManager;
         private readonly SlotQueryParser _slotQueryParser;
         private readonly ConversationalResponseGenerator _conversationalResponseGenerator;
+        private readonly InterviewBot.Services.SlotRecommendationService _slotRecommendationService;
+        private readonly InterviewBot.Services.SlotResponseFormatter _responseFormatter;
 
         public InterviewSchedulingBotEnhanced(
             IAuthenticationService authService, 
@@ -58,7 +62,9 @@ namespace InterviewBot.Bot
             IConversationStore conversationStore,
             ConversationStateManager stateManager,
             SlotQueryParser slotQueryParser,
-            ConversationalResponseGenerator conversationalResponseGenerator)
+            ConversationalResponseGenerator conversationalResponseGenerator,
+            InterviewBot.Services.SlotRecommendationService slotRecommendationService,
+            InterviewBot.Services.SlotResponseFormatter responseFormatter)
         {
             _authService = authService;
             _schedulingBusinessService = schedulingBusinessService;
@@ -77,6 +83,8 @@ namespace InterviewBot.Bot
             _stateManager = stateManager;
             _slotQueryParser = slotQueryParser;
             _conversationalResponseGenerator = conversationalResponseGenerator;
+            _slotRecommendationService = slotRecommendationService;
+            _responseFormatter = responseFormatter;
             
             // Setup dialogs with specific loggers
             _dialogs = new DialogSet(_accessors.DialogStateAccessor);
@@ -137,6 +145,14 @@ namespace InterviewBot.Bot
             if (string.IsNullOrEmpty(userMessage))
             {
                 await turnContext.SendActivityAsync(MessageFactory.Text("I didn't receive any message. Please try again."), cancellationToken);
+                return;
+            }
+            
+            // Check if this is a time slot request
+            var message = userMessage.ToLowerInvariant();
+            if (message.Contains("slots") || message.Contains("schedule") || message.Contains("interview") || message.Contains("free"))
+            {
+                await HandleTimeSlotRequestAsync(turnContext, userMessage, cancellationToken);
                 return;
             }
             
@@ -851,6 +867,105 @@ namespace InterviewBot.Bot
                 "sunday" => DayOfWeek.Sunday,
                 _ => null
             };
+        }
+
+        // New methods for enhanced time slot handling
+        private async Task HandleTimeSlotRequestAsync(ITurnContext<IMessageActivity> turnContext, string message, CancellationToken cancellationToken)
+        {
+            // Parse request parameters (emails, duration, date range)
+            var emails = ExtractEmails(message);
+            var duration = ExtractDuration(message) ?? 60; // Default to 60 minutes
+            var dateRange = ExtractDateRange(message, DateTime.Now);
+            
+            // Generate consistent time slots
+            var enhancedSlots = _slotRecommendationService.GenerateConsistentTimeSlots(
+                dateRange.startDate,
+                dateRange.endDate,
+                duration,
+                emails);
+                
+            // Format the response
+            string response = _responseFormatter.FormatTimeSlotResponse(
+                enhancedSlots,
+                dateRange.startDate,
+                dateRange.endDate,
+                duration);
+                
+            await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+        }
+
+        // Helper method to extract emails
+        private List<string> ExtractEmails(string message)
+        {
+            var emails = new List<string>();
+            var emailRegex = new System.Text.RegularExpressions.Regex(@"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}");
+            var matches = emailRegex.Matches(message);
+            
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                emails.Add(match.Value);
+            }
+            
+            return emails;
+        }
+
+        // Helper method to extract duration
+        private int? ExtractDuration(string message)
+        {
+            var durationRegex = new System.Text.RegularExpressions.Regex(@"(\d+)\s*(?:min|mins|minutes)");
+            var match = durationRegex.Match(message);
+            
+            if (match.Success && int.TryParse(match.Groups[1].Value, out int duration))
+            {
+                return duration;
+            }
+            
+            return null;
+        }
+
+        // Helper method to extract date range
+        private (DateTime startDate, DateTime endDate) ExtractDateRange(string message, DateTime currentDate)
+        {
+            // Default to tomorrow if no specific range is mentioned
+            var startDate = currentDate.AddDays(1).Date.AddHours(9); // 9 AM
+            var endDate = startDate.AddHours(8); // 5 PM
+            
+            if (message.Contains("tomorrow"))
+            {
+                // Already set to tomorrow by default
+            }
+            else if (message.Contains("next week"))
+            {
+                // Start of next week (next Monday)
+                int daysUntilMonday = ((int)DayOfWeek.Monday - (int)currentDate.DayOfWeek + 7) % 7;
+                if (daysUntilMonday == 0) daysUntilMonday = 7; // If today is Monday, go to next Monday
+                
+                startDate = currentDate.AddDays(daysUntilMonday).Date.AddHours(9);
+                endDate = startDate.AddDays(4).AddHours(8); // Friday of next week
+            }
+            else if (message.Contains("this week"))
+            {
+                // Remainder of current week
+                startDate = currentDate.AddDays(1).Date.AddHours(9);
+                int daysUntilFriday = ((int)DayOfWeek.Friday - (int)currentDate.DayOfWeek + 7) % 7;
+                if (daysUntilFriday == 0) daysUntilFriday = 7; // If today is Friday, use next Friday
+                
+                endDate = currentDate.AddDays(daysUntilFriday).Date.AddHours(17);
+            }
+            
+            // Handle time of day constraints
+            if (message.Contains("morning"))
+            {
+                startDate = startDate.Date.AddHours(9); // 9 AM
+                endDate = new DateTime(endDate.Year, endDate.Month, endDate.Day, 12, 0, 0); // 12 PM
+            }
+            else if (message.Contains("afternoon"))
+            {
+                startDate = startDate.Date.AddHours(12); // 12 PM
+                endDate = new DateTime(endDate.Year, endDate.Month, endDate.Day, 17, 0, 0); // 5 PM
+            }
+            
+            return (startDate, endDate);
         }
     }
 }
