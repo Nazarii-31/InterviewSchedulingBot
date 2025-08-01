@@ -13,7 +13,8 @@ namespace InterviewBot.Tests.Unit
         public void GenerateConsistentTimeSlots_SameInputs_ReturnsSameResults()
         {
             // Arrange
-            var service = new DeterministicSlotRecommendationService();
+            var dateInterpreter = new DateRangeInterpreter();
+            var service = new DeterministicSlotRecommendationService(dateInterpreter);
             var startDate = new DateTime(2025, 1, 6, 9, 0, 0); // Monday
             var endDate = new DateTime(2025, 1, 6, 17, 0, 0);
             var duration = 60;
@@ -50,7 +51,8 @@ namespace InterviewBot.Tests.Unit
         public void GenerateConsistentTimeSlots_QuarterHourAlignment_AllSlotsAligned()
         {
             // Arrange
-            var service = new DeterministicSlotRecommendationService();
+            var dateInterpreter = new DateRangeInterpreter();
+            var service = new DeterministicSlotRecommendationService(dateInterpreter);
             var startDate = new DateTime(2025, 1, 6, 9, 0, 0);
             var endDate = new DateTime(2025, 1, 6, 17, 0, 0);
             var duration = 60;
@@ -71,7 +73,8 @@ namespace InterviewBot.Tests.Unit
         public void GenerateConsistentTimeSlots_HasRecommendedSlot_OnlyOneRecommended()
         {
             // Arrange
-            var service = new DeterministicSlotRecommendationService();
+            var dateInterpreter = new DateRangeInterpreter();
+            var service = new DeterministicSlotRecommendationService(dateInterpreter);
             var startDate = new DateTime(2025, 1, 6, 9, 0, 0);
             var endDate = new DateTime(2025, 1, 6, 17, 0, 0);
             var duration = 60;

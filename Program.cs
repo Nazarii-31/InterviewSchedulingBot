@@ -92,6 +92,7 @@ builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ISimp
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ICleanMockDataGenerator, InterviewSchedulingBot.Services.Business.CleanMockDataGenerator>();
 
 // Register new deterministic slot generation services
+builder.Services.AddSingleton<InterviewBot.Services.DateRangeInterpreter>();
 builder.Services.AddSingleton<InterviewBot.Services.DeterministicSlotRecommendationService>();
 builder.Services.AddSingleton<InterviewBot.Services.TimeSlotResponseFormatter>();
 

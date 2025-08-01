@@ -7,11 +7,25 @@ namespace InterviewBot.Services
 {
     public class DeterministicSlotRecommendationService
     {
+        private readonly DateRangeInterpreter _dateInterpreter;
+        
+        public DeterministicSlotRecommendationService(DateRangeInterpreter dateInterpreter)
+        {
+            _dateInterpreter = dateInterpreter;
+        }
+        
+        // Add this method to interpret request directly
+        public (DateTime startDate, DateTime endDate) InterpretDateRangeFromRequest(string userRequest, DateTime currentDate)
+        {
+            return _dateInterpreter.InterpretDateRange(userRequest, currentDate);
+        }
+
         public List<EnhancedTimeSlot> GenerateConsistentTimeSlots(
             DateTime startDate, 
             DateTime endDate,
             int durationMinutes, 
-            List<string> participantEmails)
+            List<string> participantEmails,
+            int maxInitialResults = 5) // Limit initial results
         {
             // Create a deterministic seed based on inputs
             string seedInput = string.Join(",", participantEmails.OrderBy(e => e)) + 
@@ -52,7 +66,18 @@ namespace InterviewBot.Services
                         // Generate deterministic availability based on email and time
                         int participantSeed = (email + time.ToString("HH:mm")).GetHashCode();
                         var participantRandom = new Random(participantSeed);
-                        bool isAvailable = participantRandom.Next(100) < 80; // 80% chance available
+                        
+                        // Adjust availability to create more realistic conflicts
+                        // Different users have different patterns
+                        double availabilityChance = email.Contains("jane") ? 0.7 : 0.8;
+                        
+                        // Lower availability during lunch time and late afternoon
+                        if (time.Hour >= 12 && time.Hour < 14)
+                            availabilityChance *= 0.5; // Lunch conflicts
+                        else if (time.Hour >= 16)
+                            availabilityChance *= 0.6; // Late day conflicts
+                            
+                        bool isAvailable = participantRandom.NextDouble() < availabilityChance;
                         
                         if (isAvailable)
                             availableParticipants.Add(email);
@@ -90,25 +115,26 @@ namespace InterviewBot.Services
                 
             var finalSlots = new List<EnhancedTimeSlot>();
             
-            // Process each day and mark best slot for each day
+            // Get top N slots per day (better user experience)
             foreach (var day in slotsByDay.Keys.OrderBy(d => d))
             {
-                var daySlots = slotsByDay[day]
+                var topSlotsForDay = slotsByDay[day]
                     .OrderByDescending(s => s.Score)
                     .ThenBy(s => s.StartTime)
+                    .Take(maxInitialResults)
                     .ToList();
                     
-                if (daySlots.Any())
+                if (topSlotsForDay.Any())
                 {
-                    // Mark highest-scoring slot for EACH day as recommended
-                    daySlots.First().IsRecommended = true;
-                    daySlots.First().Reason += " ⭐ RECOMMENDED";
+                    // Mark highest-scoring slot for each day as recommended
+                    topSlotsForDay.First().IsRecommended = true;
+                    topSlotsForDay.First().Reason = "⭐ RECOMMENDED";
                     
-                    finalSlots.AddRange(daySlots);
+                    finalSlots.AddRange(topSlotsForDay);
                 }
             }
             
-            return finalSlots;
+            return finalSlots.OrderBy(s => s.StartTime).ToList();
         }
         
         private double GetTimeOfDayScore(DateTime time)

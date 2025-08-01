@@ -884,15 +884,25 @@ namespace InterviewBot.Bot
             // Extract duration
             int duration = ExtractDurationFromMessage(message);
             
-            // Extract date range
-            var (startDate, endDate) = ExtractDateRangeFromMessage(message);
+            // Use AI-based date range interpreter 
+            var dateRange = _deterministicSlotService.InterpretDateRangeFromRequest(message, DateTime.Now);
             
-            // Generate slots using deterministic service
-            var slots = _deterministicSlotService.GenerateConsistentTimeSlots(startDate, endDate, duration, emails);
-            
-            // Format response
-            string response = _timeSlotFormatter.FormatResponse(slots, duration, startDate, endDate);
-            
+            // Generate initial limited set of best time slots
+            var enhancedSlots = _deterministicSlotService.GenerateConsistentTimeSlots(
+                dateRange.startDate,
+                dateRange.endDate,
+                duration,
+                emails,
+                maxInitialResults: 5); // Show fewer initial options
+                
+            // Format response using original message for context
+            string response = _timeSlotFormatter.FormatTimeSlotResponse(
+                enhancedSlots,
+                dateRange.startDate,
+                dateRange.endDate,
+                duration,
+                message); // Pass original message for context
+                
             await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
         }
 
