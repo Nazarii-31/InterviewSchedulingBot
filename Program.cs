@@ -72,6 +72,7 @@ builder.Services.AddScoped<OptimalSlotFinder>();
 // Register Natural Language Processing Services
 builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.IOpenWebUIClient, InterviewSchedulingBot.Services.Integration.OpenWebUIClient>();
 builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ICleanOpenWebUIClient, InterviewSchedulingBot.Services.Integration.CleanOpenWebUIClient>();
+builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.IOpenWebUIIntegration, InterviewSchedulingBot.Services.Integration.OpenWebUIIntegration>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.SlotQueryParser>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ConversationalResponseGenerator>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ISlotRecommendationService, InterviewSchedulingBot.Services.Business.SlotRecommendationService>();
@@ -90,6 +91,18 @@ builder.Services.AddSingleton<BotStateAccessors>();
 // Register Clean Services
 builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ISimpleOpenWebUIParameterExtractor, InterviewSchedulingBot.Services.Integration.SimpleOpenWebUIParameterExtractor>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ICleanMockDataGenerator, InterviewSchedulingBot.Services.Business.CleanMockDataGenerator>();
+
+// Register new deterministic slot generation services
+builder.Services.AddSingleton<InterviewBot.Services.DateRangeInterpreter>();
+builder.Services.AddSingleton<InterviewBot.Services.DeterministicSlotRecommendationService>();
+builder.Services.AddSingleton<InterviewBot.Services.TimeSlotResponseFormatter>();
+
+// Register new AI-driven services for pure natural language processing
+builder.Services.AddScoped<InterviewBot.Services.NaturalLanguageDateProcessor>();
+builder.Services.AddScoped<InterviewBot.Services.ConversationalAIResponseFormatter>();
+
+// Register pure AI orchestrator for slot scheduling
+builder.Services.AddScoped<InterviewBot.Services.IAIOrchestrator, InterviewBot.Services.AIOrchestrator>();
 
 // === EXISTING SERVICES ===
 

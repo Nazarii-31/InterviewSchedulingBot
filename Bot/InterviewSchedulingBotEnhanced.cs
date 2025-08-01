@@ -15,7 +15,11 @@ using InterviewSchedulingBot.Services.Integration;
 using InterviewSchedulingBot.Services;
 using InterviewSchedulingBot.Models;
 using InterviewBot.Domain.Entities;
+using InterviewBot.Models;
+using InterviewBot.Services;
 using System.Globalization;
+using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace InterviewBot.Bot
 {
@@ -33,12 +37,17 @@ namespace InterviewBot.Bot
         private readonly ILogger<InterviewSchedulingBotEnhanced> _logger;
         private readonly IAIResponseService _aiResponseService;
         private readonly InterviewBot.Domain.Interfaces.ISchedulingService _schedulingService;
-        private readonly IOpenWebUIClient _openWebUIClient;
+        private readonly IOpenWebUIIntegration _openWebUIIntegration;
         private readonly ICleanOpenWebUIClient _cleanOpenWebUIClient;
         private readonly IConversationStore _conversationStore;
         private readonly ConversationStateManager _stateManager;
         private readonly SlotQueryParser _slotQueryParser;
         private readonly ConversationalResponseGenerator _conversationalResponseGenerator;
+        private readonly DeterministicSlotRecommendationService _deterministicSlotService;
+        private readonly TimeSlotResponseFormatter _timeSlotFormatter;
+        private readonly NaturalLanguageDateProcessor _naturalLanguageDateProcessor;
+        private readonly ConversationalAIResponseFormatter _conversationalAIResponseFormatter;
+        private readonly IAIOrchestrator _aiOrchestrator;
 
         public InterviewSchedulingBotEnhanced(
             IAuthenticationService authService, 
@@ -53,12 +62,17 @@ namespace InterviewBot.Bot
             ILoggerFactory loggerFactory,
             IAIResponseService aiResponseService,
             InterviewBot.Domain.Interfaces.ISchedulingService schedulingService,
-            IOpenWebUIClient openWebUIClient,
+            IOpenWebUIIntegration openWebUIIntegration,
             ICleanOpenWebUIClient cleanOpenWebUIClient,
             IConversationStore conversationStore,
             ConversationStateManager stateManager,
             SlotQueryParser slotQueryParser,
-            ConversationalResponseGenerator conversationalResponseGenerator)
+            ConversationalResponseGenerator conversationalResponseGenerator,
+            DeterministicSlotRecommendationService deterministicSlotService,
+            TimeSlotResponseFormatter timeSlotFormatter,
+            NaturalLanguageDateProcessor naturalLanguageDateProcessor,
+            ConversationalAIResponseFormatter conversationalAIResponseFormatter,
+            IAIOrchestrator aiOrchestrator)
         {
             _authService = authService;
             _schedulingBusinessService = schedulingBusinessService;
@@ -71,12 +85,17 @@ namespace InterviewBot.Bot
             _logger = logger;
             _aiResponseService = aiResponseService;
             _schedulingService = schedulingService;
-            _openWebUIClient = openWebUIClient;
+            _openWebUIIntegration = openWebUIIntegration;
             _cleanOpenWebUIClient = cleanOpenWebUIClient;
             _conversationStore = conversationStore;
             _stateManager = stateManager;
             _slotQueryParser = slotQueryParser;
             _conversationalResponseGenerator = conversationalResponseGenerator;
+            _deterministicSlotService = deterministicSlotService;
+            _timeSlotFormatter = timeSlotFormatter;
+            _naturalLanguageDateProcessor = naturalLanguageDateProcessor;
+            _conversationalAIResponseFormatter = conversationalAIResponseFormatter;
+            _aiOrchestrator = aiOrchestrator;
             
             // Setup dialogs with specific loggers
             _dialogs = new DialogSet(_accessors.DialogStateAccessor);
@@ -163,6 +182,25 @@ namespace InterviewBot.Bot
                 // Fallback to original parameter extraction if SlotQueryParser fails
                 var parameters = await _cleanOpenWebUIClient.ExtractParametersAsync(userMessage);
                 
+                // Check if this is a slot request with emails - use pure AI orchestrator
+                if ((userMessage.Contains("slot") || userMessage.Contains("schedule") || userMessage.Contains("time") || userMessage.Contains("meeting")) 
+                    && ExtractEmailsFromMessage(userMessage).Any())
+                {
+                    var aiResponse = await _aiOrchestrator.ProcessSchedulingRequestAsync(userMessage, DateTime.Now);
+                    
+                    // Add to conversation history
+                    await _stateManager.AddToHistoryAsync(
+                        conversationId, 
+                        new MessageRecord { Text = userMessage, IsFromBot = false, Timestamp = DateTime.UtcNow });
+                        
+                    await _stateManager.AddToHistoryAsync(
+                        conversationId,
+                        new MessageRecord { Text = aiResponse, IsFromBot = true, Timestamp = DateTime.UtcNow });
+                    
+                    await turnContext.SendActivityAsync(MessageFactory.Text(aiResponse), cancellationToken);
+                    return;
+                }
+                
                 // If we have SlotQueryCriteria, use it to enhance parameters
                 if (currentCriteria != null)
                 {
@@ -217,24 +255,15 @@ namespace InterviewBot.Bot
         {
             try
             {
-                // Use OpenWebUI to generate a dynamic welcome message
-                var prompt = @"Generate a professional welcome message for an AI-powered interview scheduling assistant. 
-                              Include: greeting, what you can help with (finding time slots, scheduling meetings, calendar management), 
-                              mention natural language support, and ask how you can help today. Keep it warm but professional.";
-                
-                var context = new { type = "welcome", capabilities = new[] { "time_slots", "scheduling", "calendar_management" } };
-                
-                var response = await _openWebUIClient.GenerateResponseAsync(prompt, context);
-                return response;
+                // Use the new pure AI integration for welcome messages
+                return await _openWebUIIntegration.GenerateConversationalResponseAsync("welcome");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to generate welcome response using OpenWebUI API");
                 
-                // Send detailed error message to user about API connectivity
-                return $"⚠️ **System Error**: Unable to connect to AI service. Please check that OpenWebUI is properly configured and accessible.\n\n" +
-                       $"**Error Details**: {ex.Message}\n\n" +
-                       "Please contact your system administrator to resolve this issue.";
+                // Fallback welcome message
+                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots and check calendar availability using natural language. What would you like me to help you with today?";
             }
         }
 
@@ -254,20 +283,15 @@ namespace InterviewBot.Bot
                     return await GenerateSlotsResponseAsync(slots, parameters, originalMessage);
                 }
                 
-                // Otherwise generate a general AI response
-                var prompt = $"The user said: '{originalMessage}'. Generate a helpful response for an interview scheduling assistant.";
-                var context = new { userMessage = originalMessage, extractedParameters = parameters };
-                
-                var response = await _openWebUIClient.GenerateResponseAsync(prompt, context);
-                return response;
+                // For general messages, use the pure AI integration
+                return await _openWebUIIntegration.ProcessGeneralMessageAsync(originalMessage);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate response using OpenWebUI API");
+                _logger.LogError(ex, "Error generating response: {Error}", ex.Message);
                 
-                return $"⚠️ **System Error**: Unable to connect to AI service to process your request.\n\n" +
-                       $"**Error Details**: {ex.Message}\n\n" +
-                       "Please contact your system administrator to resolve this issue.";
+                // Provide helpful fallback response instead of technical error
+                return "I'm here to help with interview scheduling! You can ask me to find time slots, check availability, or schedule meetings using natural language. For example, try 'Find slots tomorrow afternoon with john@company.com' or 'Check when we're all available next week'. How can I assist you today?";
             }
         }
 
@@ -851,6 +875,154 @@ namespace InterviewBot.Bot
                 "sunday" => DayOfWeek.Sunday,
                 _ => null
             };
+        }
+
+        // New methods for handling slot requests with deterministic behavior
+        private async Task HandleSlotRequestAsync(ITurnContext<IMessageActivity> turnContext, string message, CancellationToken cancellationToken)
+        {
+            try
+            {
+                // Extract emails
+                var emails = ExtractEmailsFromMessage(message);
+                if (!emails.Any())
+                {
+                    await turnContext.SendActivityAsync("I couldn't find any email addresses in your request. Please include participant emails.");
+                    return;
+                }
+                
+                // Extract duration
+                int duration = ExtractDurationFromMessage(message);
+                
+                // Use robust AI-driven date interpretation
+                var aiDateInterpreter = new AIDateInterpreter(_openWebUIIntegration, 
+                    _logger as ILogger<AIDateInterpreter> ?? new NullLogger<AIDateInterpreter>());
+                
+                var dateInterpretation = await aiDateInterpreter.InterpretDateReferenceAsync(message, DateTime.Now);
+                
+                _logger.LogInformation("Date interpretation result: {StartDate} to {EndDate}, WasAdjusted: {WasAdjusted}, Explanation: {Explanation}", 
+                    dateInterpretation.StartDate, dateInterpretation.EndDate, dateInterpretation.WasAdjusted, dateInterpretation.Explanation);
+                
+                // Generate initial limited set of best time slots
+                var enhancedSlots = _deterministicSlotService.GenerateConsistentTimeSlots(
+                    dateInterpretation.StartDate,
+                    dateInterpretation.EndDate,
+                    duration,
+                    emails,
+                    maxInitialResults: 5); // Show fewer initial options
+                    
+                // Use AI-driven conversational response formatting
+                string response = await _conversationalAIResponseFormatter.FormatTimeSlotResponseAsync(
+                    enhancedSlots,
+                    dateInterpretation.StartDate,
+                    dateInterpretation.EndDate,
+                    duration,
+                    message,
+                    dateInterpretation.WasAdjusted,
+                    dateInterpretation.Explanation);
+                    
+                await turnContext.SendActivityAsync(MessageFactory.Text(response), cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in HandleSlotRequestAsync for message: {Message}", message);
+                await turnContext.SendActivityAsync("I encountered an error processing your scheduling request. Please try again with a different format.");
+            }
+        }
+        
+        /// <summary>
+        /// Check if the original request was for a weekend day that got adjusted to a business day using AI
+        /// </summary>
+        private async Task<bool> CheckIfWeekendWasAdjustedAsync(string originalRequest, (DateTime startDate, DateTime endDate) dateRange, DateTime currentDate)
+        {
+            try
+            {
+                // Use AI to determine if weekend adjustment occurred
+                var context = $"Original request: '{originalRequest}' on {currentDate:dddd}. Result dates: {dateRange.startDate:dddd} to {dateRange.endDate:dddd}";
+                var response = await _openWebUIIntegration.GenerateConversationalResponseAsync("weekend_adjustment_check", context);
+                
+                // Simple check: if response contains "weekend" or "adjusted", assume adjustment occurred
+                return response.ToLowerInvariant().Contains("weekend") || response.ToLowerInvariant().Contains("adjusted");
+            }
+            catch
+            {
+                // Fallback to simple logic
+                var requestLower = originalRequest.ToLowerInvariant();
+                if (requestLower.Contains("tomorrow"))
+                {
+                    var actualTomorrow = currentDate.AddDays(1).Date;
+                    var isWeekend = actualTomorrow.DayOfWeek == DayOfWeek.Saturday || actualTomorrow.DayOfWeek == DayOfWeek.Sunday;
+                    var resultIsNotTomorrow = dateRange.startDate.Date != actualTomorrow;
+                    
+                    return isWeekend && resultIsNotTomorrow;
+                }
+                
+                return false;
+            }
+        }
+
+        private List<string> ExtractEmailsFromMessage(string message)
+        {
+            // Use regex to extract emails
+            var emails = new List<string>();
+            var regex = new Regex(@"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}");
+            var matches = regex.Matches(message);
+            foreach (Match match in matches)
+            {
+                emails.Add(match.Value);
+            }
+            return emails;
+        }
+
+        private int ExtractDurationFromMessage(string message)
+        {
+            // Use regex to extract duration
+            var regex = new Regex(@"(\d+)\s*(?:min|mins|minutes)");
+            var match = regex.Match(message);
+            if (match.Success && int.TryParse(match.Groups[1].Value, out int duration))
+            {
+                return duration;
+            }
+            return 60; // Default to 60 minutes
+        }
+
+        private (DateTime start, DateTime end) ExtractDateRangeFromMessage(string message)
+        {
+            DateTime now = DateTime.Now;
+            DateTime tomorrow = DateFormattingService.GetNextBusinessDay(now);
+            
+            // Default to tomorrow
+            DateTime start = new DateTime(tomorrow.Year, tomorrow.Month, tomorrow.Day, 9, 0, 0);
+            DateTime end = new DateTime(tomorrow.Year, tomorrow.Month, tomorrow.Day, 17, 0, 0);
+            
+            // Handle specific time ranges
+            if (message.Contains("tomorrow"))
+            {
+                // Already set to tomorrow
+            }
+            else if (message.Contains("next week"))
+            {
+                // Find next Monday
+                DateTime nextMonday = now.Date;
+                while (nextMonday.DayOfWeek != DayOfWeek.Monday || nextMonday.Date <= now.Date)
+                    nextMonday = nextMonday.AddDays(1);
+                
+                start = new DateTime(nextMonday.Year, nextMonday.Month, nextMonday.Day, 9, 0, 0);
+                end = new DateTime(nextMonday.AddDays(4).Year, nextMonday.AddDays(4).Month, nextMonday.AddDays(4).Day, 17, 0, 0);
+            }
+            
+            // Handle time of day
+            if (message.Contains("morning"))
+            {
+                start = new DateTime(start.Year, start.Month, start.Day, 9, 0, 0);
+                end = new DateTime(end.Year, end.Month, end.Day, 12, 0, 0);
+            }
+            else if (message.Contains("afternoon"))
+            {
+                start = new DateTime(start.Year, start.Month, start.Day, 13, 0, 0);
+                end = new DateTime(end.Year, end.Month, end.Day, 17, 0, 0);
+            }
+            
+            return (start, end);
         }
     }
 }
