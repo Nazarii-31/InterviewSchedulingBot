@@ -101,6 +101,9 @@ builder.Services.AddSingleton<InterviewBot.Services.TimeSlotResponseFormatter>()
 builder.Services.AddScoped<InterviewBot.Services.NaturalLanguageDateProcessor>();
 builder.Services.AddScoped<InterviewBot.Services.ConversationalAIResponseFormatter>();
 
+// Register pure AI orchestrator for slot scheduling
+builder.Services.AddScoped<InterviewBot.Services.IAIOrchestrator, InterviewBot.Services.AIOrchestrator>();
+
 // === EXISTING SERVICES ===
 
 // Add services to the container.

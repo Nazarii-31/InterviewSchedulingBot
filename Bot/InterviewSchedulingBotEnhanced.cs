@@ -47,6 +47,7 @@ namespace InterviewBot.Bot
         private readonly TimeSlotResponseFormatter _timeSlotFormatter;
         private readonly NaturalLanguageDateProcessor _naturalLanguageDateProcessor;
         private readonly ConversationalAIResponseFormatter _conversationalAIResponseFormatter;
+        private readonly IAIOrchestrator _aiOrchestrator;
 
         public InterviewSchedulingBotEnhanced(
             IAuthenticationService authService, 
@@ -70,7 +71,8 @@ namespace InterviewBot.Bot
             DeterministicSlotRecommendationService deterministicSlotService,
             TimeSlotResponseFormatter timeSlotFormatter,
             NaturalLanguageDateProcessor naturalLanguageDateProcessor,
-            ConversationalAIResponseFormatter conversationalAIResponseFormatter)
+            ConversationalAIResponseFormatter conversationalAIResponseFormatter,
+            IAIOrchestrator aiOrchestrator)
         {
             _authService = authService;
             _schedulingBusinessService = schedulingBusinessService;
@@ -93,6 +95,7 @@ namespace InterviewBot.Bot
             _timeSlotFormatter = timeSlotFormatter;
             _naturalLanguageDateProcessor = naturalLanguageDateProcessor;
             _conversationalAIResponseFormatter = conversationalAIResponseFormatter;
+            _aiOrchestrator = aiOrchestrator;
             
             // Setup dialogs with specific loggers
             _dialogs = new DialogSet(_accessors.DialogStateAccessor);
@@ -179,11 +182,22 @@ namespace InterviewBot.Bot
                 // Fallback to original parameter extraction if SlotQueryParser fails
                 var parameters = await _cleanOpenWebUIClient.ExtractParametersAsync(userMessage);
                 
-                // Check if this is a slot request with emails - use deterministic handler
+                // Check if this is a slot request with emails - use pure AI orchestrator
                 if ((userMessage.Contains("slot") || userMessage.Contains("schedule") || userMessage.Contains("time") || userMessage.Contains("meeting")) 
                     && ExtractEmailsFromMessage(userMessage).Any())
                 {
-                    await HandleSlotRequestAsync(turnContext, userMessage, cancellationToken);
+                    var aiResponse = await _aiOrchestrator.ProcessSchedulingRequestAsync(userMessage, DateTime.Now);
+                    
+                    // Add to conversation history
+                    await _stateManager.AddToHistoryAsync(
+                        conversationId, 
+                        new MessageRecord { Text = userMessage, IsFromBot = false, Timestamp = DateTime.UtcNow });
+                        
+                    await _stateManager.AddToHistoryAsync(
+                        conversationId,
+                        new MessageRecord { Text = aiResponse, IsFromBot = true, Timestamp = DateTime.UtcNow });
+                    
+                    await turnContext.SendActivityAsync(MessageFactory.Text(aiResponse), cancellationToken);
                     return;
                 }
                 
