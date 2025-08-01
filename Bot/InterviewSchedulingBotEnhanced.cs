@@ -36,7 +36,7 @@ namespace InterviewBot.Bot
         private readonly ILogger<InterviewSchedulingBotEnhanced> _logger;
         private readonly IAIResponseService _aiResponseService;
         private readonly InterviewBot.Domain.Interfaces.ISchedulingService _schedulingService;
-        private readonly IOpenWebUIClient _openWebUIClient;
+        private readonly IOpenWebUIIntegration _openWebUIIntegration;
         private readonly ICleanOpenWebUIClient _cleanOpenWebUIClient;
         private readonly IConversationStore _conversationStore;
         private readonly ConversationStateManager _stateManager;
@@ -60,7 +60,7 @@ namespace InterviewBot.Bot
             ILoggerFactory loggerFactory,
             IAIResponseService aiResponseService,
             InterviewBot.Domain.Interfaces.ISchedulingService schedulingService,
-            IOpenWebUIClient openWebUIClient,
+            IOpenWebUIIntegration openWebUIIntegration,
             ICleanOpenWebUIClient cleanOpenWebUIClient,
             IConversationStore conversationStore,
             ConversationStateManager stateManager,
@@ -82,7 +82,7 @@ namespace InterviewBot.Bot
             _logger = logger;
             _aiResponseService = aiResponseService;
             _schedulingService = schedulingService;
-            _openWebUIClient = openWebUIClient;
+            _openWebUIIntegration = openWebUIIntegration;
             _cleanOpenWebUIClient = cleanOpenWebUIClient;
             _conversationStore = conversationStore;
             _stateManager = stateManager;
@@ -240,24 +240,15 @@ namespace InterviewBot.Bot
         {
             try
             {
-                // Use OpenWebUI to generate a dynamic welcome message
-                var prompt = @"Generate a professional welcome message for an AI-powered interview scheduling assistant. 
-                              Include: greeting, what you can help with (finding time slots, scheduling meetings, calendar management), 
-                              mention natural language support, and ask how you can help today. Keep it warm but professional.";
-                
-                var context = new { type = "welcome", capabilities = new[] { "time_slots", "scheduling", "calendar_management" } };
-                
-                var response = await _openWebUIClient.GenerateResponseAsync(prompt, context);
-                return response;
+                // Use the new pure AI integration for welcome messages
+                return await _openWebUIIntegration.GenerateConversationalResponseAsync("welcome");
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Failed to generate welcome response using OpenWebUI API");
                 
-                // Send detailed error message to user about API connectivity
-                return $"⚠️ **System Error**: Unable to connect to AI service. Please check that OpenWebUI is properly configured and accessible.\n\n" +
-                       $"**Error Details**: {ex.Message}\n\n" +
-                       "Please contact your system administrator to resolve this issue.";
+                // Fallback welcome message
+                return "Hello! 👋 I'm your AI-powered Interview Scheduling assistant. I can help you find available time slots and check calendar availability using natural language. What would you like me to help you with today?";
             }
         }
 
@@ -277,20 +268,15 @@ namespace InterviewBot.Bot
                     return await GenerateSlotsResponseAsync(slots, parameters, originalMessage);
                 }
                 
-                // Otherwise generate a general AI response
-                var prompt = $"The user said: '{originalMessage}'. Generate a helpful response for an interview scheduling assistant.";
-                var context = new { userMessage = originalMessage, extractedParameters = parameters };
-                
-                var response = await _openWebUIClient.GenerateResponseAsync(prompt, context);
-                return response;
+                // For general messages, use the pure AI integration
+                return await _openWebUIIntegration.ProcessGeneralMessageAsync(originalMessage);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to generate response using OpenWebUI API");
+                _logger.LogError(ex, "Error generating response: {Error}", ex.Message);
                 
-                return $"⚠️ **System Error**: Unable to connect to AI service to process your request.\n\n" +
-                       $"**Error Details**: {ex.Message}\n\n" +
-                       "Please contact your system administrator to resolve this issue.";
+                // Provide helpful fallback response instead of technical error
+                return "I'm here to help with interview scheduling! You can ask me to find time slots, check availability, or schedule meetings using natural language. For example, try 'Find slots tomorrow afternoon with john@company.com' or 'Check when we're all available next week'. How can I assist you today?";
             }
         }
 
@@ -890,11 +876,11 @@ namespace InterviewBot.Bot
             // Extract duration
             int duration = ExtractDurationFromMessage(message);
             
-            // Use AI-driven natural language date processor instead of hardcoded logic
-            var dateRange = await _naturalLanguageDateProcessor.ProcessDateReferenceAsync(message, DateTime.Now);
+            // Use pure AI-driven natural language date processor
+            var dateRange = await _openWebUIIntegration.ProcessDateReferenceAsync(message, DateTime.Now);
             
             // Check if date was adjusted from weekend to business day
-            bool wasWeekendAdjusted = CheckIfWeekendWasAdjusted(message, dateRange, DateTime.Now);
+            bool wasWeekendAdjusted = await CheckIfWeekendWasAdjustedAsync(message, dateRange, DateTime.Now);
             
             // Generate initial limited set of best time slots
             var enhancedSlots = _deterministicSlotService.GenerateConsistentTimeSlots(
@@ -917,23 +903,34 @@ namespace InterviewBot.Bot
         }
         
         /// <summary>
-        /// Check if the original request was for a weekend day that got adjusted to a business day
+        /// Check if the original request was for a weekend day that got adjusted to a business day using AI
         /// </summary>
-        private bool CheckIfWeekendWasAdjusted(string originalRequest, (DateTime startDate, DateTime endDate) dateRange, DateTime currentDate)
+        private async Task<bool> CheckIfWeekendWasAdjustedAsync(string originalRequest, (DateTime startDate, DateTime endDate) dateRange, DateTime currentDate)
         {
-            var requestLower = originalRequest.ToLowerInvariant();
-            
-            // If they asked for "tomorrow" and tomorrow is a weekend, but we're showing next business day
-            if (requestLower.Contains("tomorrow"))
+            try
             {
-                var actualTomorrow = currentDate.AddDays(1).Date;
-                var isWeekend = actualTomorrow.DayOfWeek == DayOfWeek.Saturday || actualTomorrow.DayOfWeek == DayOfWeek.Sunday;
-                var resultIsNotTomorrow = dateRange.startDate.Date != actualTomorrow;
+                // Use AI to determine if weekend adjustment occurred
+                var context = $"Original request: '{originalRequest}' on {currentDate:dddd}. Result dates: {dateRange.startDate:dddd} to {dateRange.endDate:dddd}";
+                var response = await _openWebUIIntegration.GenerateConversationalResponseAsync("weekend_adjustment_check", context);
                 
-                return isWeekend && resultIsNotTomorrow;
+                // Simple check: if response contains "weekend" or "adjusted", assume adjustment occurred
+                return response.ToLowerInvariant().Contains("weekend") || response.ToLowerInvariant().Contains("adjusted");
             }
-            
-            return false;
+            catch
+            {
+                // Fallback to simple logic
+                var requestLower = originalRequest.ToLowerInvariant();
+                if (requestLower.Contains("tomorrow"))
+                {
+                    var actualTomorrow = currentDate.AddDays(1).Date;
+                    var isWeekend = actualTomorrow.DayOfWeek == DayOfWeek.Saturday || actualTomorrow.DayOfWeek == DayOfWeek.Sunday;
+                    var resultIsNotTomorrow = dateRange.startDate.Date != actualTomorrow;
+                    
+                    return isWeekend && resultIsNotTomorrow;
+                }
+                
+                return false;
+            }
         }
 
         private List<string> ExtractEmailsFromMessage(string message)
