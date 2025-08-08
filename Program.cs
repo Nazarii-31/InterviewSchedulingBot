@@ -72,7 +72,15 @@ builder.Services.AddScoped<OptimalSlotFinder>();
 
 // Register Natural Language Processing Services
 builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.IOpenWebUIClient, InterviewSchedulingBot.Services.Integration.OpenWebUIClient>();
-builder.Services.AddHttpClient<InterviewSchedulingBot.Services.Integration.ICleanOpenWebUIClient, InterviewSchedulingBot.Services.Integration.CleanOpenWebUIClient>();
+builder.Services.AddHttpClient();
+builder.Services.AddSingleton<InterviewSchedulingBot.Services.Integration.ICleanOpenWebUIClient>(sp =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var logger = sp.GetRequiredService<ILogger<InterviewSchedulingBot.Services.Integration.CleanOpenWebUIClient>>();
+    var factory = sp.GetRequiredService<IHttpClientFactory>();
+    var client = factory.CreateClient("openwebui");
+    return new InterviewSchedulingBot.Services.Integration.CleanOpenWebUIClient(client, config, logger);
+});
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.SlotQueryParser>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ConversationalResponseGenerator>();
 builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ISlotRecommendationService, InterviewSchedulingBot.Services.Business.SlotRecommendationService>();
@@ -95,6 +103,9 @@ builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.ICleanMockDa
 // Register new enhanced slot services
 builder.Services.AddSingleton<InterviewBot.Services.SlotRecommendationService>();
 builder.Services.AddSingleton<InterviewBot.Services.SlotResponseFormatter>();
+
+// Register new enhanced AI-powered scheduling service
+builder.Services.AddScoped<InterviewSchedulingBot.Services.Business.IInterviewSchedulingService, InterviewSchedulingBot.Services.Business.InterviewSchedulingService>();
 
 // === EXISTING SERVICES ===
 

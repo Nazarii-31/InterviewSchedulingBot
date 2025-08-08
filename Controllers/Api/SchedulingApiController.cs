@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using InterviewSchedulingBot.Interfaces.Business;
 using InterviewSchedulingBot.Interfaces.Integration;
+using InterviewSchedulingBot.Services.Business;
 using System.ComponentModel.DataAnnotations;
 
 namespace InterviewSchedulingBot.Controllers.Api
@@ -16,16 +17,58 @@ namespace InterviewSchedulingBot.Controllers.Api
     {
         private readonly ISchedulingBusinessService _businessService;
         private readonly ITeamsIntegrationService _teamsService;
+        private readonly IInterviewSchedulingService _interviewSchedulingService;
         private readonly ILogger<SchedulingController> _logger;
 
         public SchedulingController(
             ISchedulingBusinessService businessService,
             ITeamsIntegrationService teamsService,
+            IInterviewSchedulingService interviewSchedulingService,
             ILogger<SchedulingController> logger)
         {
             _businessService = businessService;
             _teamsService = teamsService;
+            _interviewSchedulingService = interviewSchedulingService;
             _logger = logger;
+        }
+
+        /// <summary>
+        /// Process natural language scheduling request using AI
+        /// </summary>
+        /// <param name="request">User message for scheduling</param>
+        /// <returns>AI-generated response with slot suggestions or error message</returns>
+        [HttpPost("find-slots")]
+        [ProducesResponseType(typeof(string), 200)]
+        [ProducesResponseType(typeof(ApiErrorResponse), 400)]
+        [ProducesResponseType(typeof(ApiErrorResponse), 500)]
+        public async Task<ActionResult<string>> FindSlots(
+            [FromBody] UserMessageRequest request)
+        {
+            _logger.LogInformation("Processing natural language scheduling request: {Message}", request.UserMessage);
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(request.UserMessage))
+                {
+                    return BadRequest(new ApiErrorResponse
+                    {
+                        Error = "User message is required",
+                        Details = { "Please provide a scheduling request message" }
+                    });
+                }
+
+                var response = await _interviewSchedulingService.ProcessSchedulingRequestAsync(request.UserMessage);
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error processing scheduling request: {Message}", request.UserMessage);
+                return StatusCode(500, new ApiErrorResponse
+                {
+                    Error = "Internal server error",
+                    Details = { "An error occurred while processing your scheduling request" }
+                });
+            }
         }
 
         /// <summary>
@@ -481,6 +524,12 @@ namespace InterviewSchedulingBot.Controllers.Api
         public string End { get; set; } = string.Empty;
         public string Status { get; set; } = string.Empty;
         public string Subject { get; set; } = string.Empty;
+    }
+
+    public class UserMessageRequest
+    {
+        [Required]
+        public string UserMessage { get; set; } = string.Empty;
     }
 
     #endregion
