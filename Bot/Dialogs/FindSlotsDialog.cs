@@ -348,7 +348,7 @@ namespace InterviewBot.Bot.Dialogs
             }
         }
         
-        private async Task<Dictionary<string, List<TimeSlot>>> GetMockParticipantAvailabilityAsync(
+        private async Task<Dictionary<string, List<InterviewBot.Domain.Entities.TimeSlot>>> GetMockParticipantAvailabilityAsync(
             List<string> participants,
             DateTime startDate,
             DateTime endDate)
@@ -357,11 +357,11 @@ namespace InterviewBot.Bot.Dialogs
             // In a real implementation, this would query the actual availability service
             await Task.Delay(1); // Simulate async call
             
-            var result = new Dictionary<string, List<TimeSlot>>();
+            var result = new Dictionary<string, List<InterviewBot.Domain.Entities.TimeSlot>>();
             
             foreach (var participant in participants)
             {
-                var slots = new List<TimeSlot>();
+                var slots = new List<InterviewBot.Domain.Entities.TimeSlot>();
                 
                 // Create some mock available time slots
                 var current = startDate.Date.AddHours(9); // Start at 9 AM
@@ -369,7 +369,7 @@ namespace InterviewBot.Bot.Dialogs
                 while (current.Date <= endDate.Date)
                 {
                     // Add morning slot (9-12)
-                    slots.Add(new TimeSlot
+                    slots.Add(new InterviewBot.Domain.Entities.TimeSlot
                     {
                         StartTime = current,
                         EndTime = current.AddHours(3)
@@ -378,7 +378,7 @@ namespace InterviewBot.Bot.Dialogs
                     // Add afternoon slot (13-17) with some gaps for realism
                     if (current.DayOfWeek != DayOfWeek.Wednesday) // Simulate Wednesday afternoon conflicts
                     {
-                        slots.Add(new TimeSlot
+                        slots.Add(new InterviewBot.Domain.Entities.TimeSlot
                         {
                             StartTime = current.AddHours(4), // 1 PM
                             EndTime = current.AddHours(8)    // 5 PM

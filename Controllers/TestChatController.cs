@@ -141,8 +141,8 @@ namespace InterviewSchedulingBot.Controllers
             return Redirect("/api/mock-data/interface");
         }
 
-        [HttpPost("generate-mock-data")]
-        public IActionResult GenerateMockData([FromBody] MockDataRequest request)
+    [HttpPost("generate-mock-data")]
+    public IActionResult GenerateMockData([FromBody] ChatMockDataRequest request)
         {
             try
             {
@@ -1274,7 +1274,7 @@ namespace InterviewSchedulingBot.Controllers
         public object? Content { get; set; }
     }
 
-    public class MockDataRequest
+    public class ChatMockDataRequest
     {
         public int NumberOfUsers { get; set; } = 5;
         public double BusynessLevel { get; set; } = 0.6;
